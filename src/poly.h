@@ -1,7 +1,8 @@
 /** @file
    Interfejs klasy wielomianów
 
-   @author Jakub Pawlewicz <pan@mimuw.edu.pl>, TODO
+   @author Jakub Pawlewicz <pan@mimuw.edu.pl>
+   @author Tomasz Necio <Tomasz.Necio@fuw.edu.pl>
    @copyright Uniwersytet Warszawski
    @date 2017-04-09, TODO
 */
@@ -24,7 +25,9 @@ typedef int poly_exp_t;
  */
 typedef struct Poly
 {
-    /* TODO */
+	poly_coeff_t constant;
+	struct Mono* monos;
+	/* TODO */
 } Poly;
 
 /**
@@ -35,7 +38,7 @@ typedef struct Poly
   */
 typedef struct Mono
 {
-    Poly p; ///< współczynnik
+	Poly p; ///< współczynnik
     poly_exp_t exp; ///< wykładnik
 } Mono;
 
@@ -45,7 +48,10 @@ typedef struct Mono
  * @return wielomian
  */
 static inline Poly PolyFromCoeff(poly_coeff_t c) {
-    /* TODO */
+	Poly p;
+	p.constant = c;
+	p.monos = NULL;
+	return p;
 }
 
 /**
@@ -53,7 +59,7 @@ static inline Poly PolyFromCoeff(poly_coeff_t c) {
  * @return wielomian
  */
 static inline Poly PolyZero() {
-    /* TODO */
+	return PolyFromCoeff(0);
 }
 
 /**
@@ -70,7 +76,7 @@ static inline Mono MonoFromPoly(Poly *p, poly_exp_t e) {
 /**
  * Sprawdza, czy wielomian jest współczynnikiem.
  * @param[in] p : wielomian
- * @return Czy wielomian jest współczynnikiem?
+ * @return Czy wielomian jest współczynnikiem? // CO TO ZNACZY?
  */
 static inline bool PolyIsCoeff(const Poly *p) {
     /* TODO */
@@ -82,7 +88,7 @@ static inline bool PolyIsCoeff(const Poly *p) {
  * @return Czy wielomian jest równy zero?
  */
 static inline bool PolyIsZero(const Poly *p) {
-    /* TODO */
+	return (p->constant == 0 && p->monos == NULL);
 }
 
 /**
@@ -96,7 +102,8 @@ void PolyDestroy(Poly *p);
  * @param[in] m : jednomian
  */
 static inline void MonoDestroy(Mono *m) {
-    /* TODO */
+	PolyDestroy(&(m->p));
+	free(m);
 }
 
 /**
@@ -112,7 +119,7 @@ Poly PolyClone(const Poly *p);
  * @return skopiowany jednomian
  */
 static inline Mono MonoClone(const Mono *m) {
-    /* TODO */
+	/* TODO */
 }
 
 /**
