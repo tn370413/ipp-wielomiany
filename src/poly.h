@@ -12,6 +12,7 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdlib.h>
 
 /** Typ współczynników wielomianu */
 typedef long poly_coeff_t;
@@ -76,10 +77,10 @@ static inline Mono MonoFromPoly(Poly *p, poly_exp_t e) {
 /**
  * Sprawdza, czy wielomian jest współczynnikiem.
  * @param[in] p : wielomian
- * @return Czy wielomian jest współczynnikiem? // CO TO ZNACZY?
+ * @return Czy wielomian jest skalarem?
  */
 static inline bool PolyIsCoeff(const Poly *p) {
-    /* TODO */
+    return (p->monos == NULL);
 }
 
 /**
@@ -119,7 +120,10 @@ Poly PolyClone(const Poly *p);
  * @return skopiowany jednomian
  */
 static inline Mono MonoClone(const Mono *m) {
-	/* TODO */
+	Mono new_m;
+	new_m.p = PolyClone(&m->p);
+	new_m.exp = m->exp;
+	return new_m;
 }
 
 /**
