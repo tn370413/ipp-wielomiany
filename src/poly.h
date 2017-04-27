@@ -27,8 +27,8 @@ typedef int poly_exp_t;
 typedef struct Poly
 {
 	poly_coeff_t constant;
-	struct Mono* monos;
-	/* TODO */
+	struct Mono *monos;
+	size_t monos_count;
 } Poly;
 
 /**
@@ -80,7 +80,7 @@ static inline Mono MonoFromPoly(Poly *p, poly_exp_t e) {
  * @return Czy wielomian jest skalarem?
  */
 static inline bool PolyIsCoeff(const Poly *p) {
-    return (p->monos == NULL);
+	return (p->monos_count == 0);
 }
 
 /**
@@ -89,7 +89,7 @@ static inline bool PolyIsCoeff(const Poly *p) {
  * @return Czy wielomian jest równy zero?
  */
 static inline bool PolyIsZero(const Poly *p) {
-	return (p->constant == 0 && p->monos == NULL);
+	return (p->constant == 0 && p->monos_count == 0);
 }
 
 /**
@@ -104,7 +104,8 @@ void PolyDestroy(Poly *p);
  */
 static inline void MonoDestroy(Mono *m) {
 	PolyDestroy(&(m->p));
-	free(m);
+	m->p = PolyZero();
+	m->exp = 0;
 }
 
 /**
@@ -121,7 +122,7 @@ Poly PolyClone(const Poly *p);
  */
 static inline Mono MonoClone(const Mono *m) {
 	Mono new_m;
-	new_m.p = PolyClone(&m->p);
+	new_m.p = PolyClone(&(m->p));
 	new_m.exp = m->exp;
 	return new_m;
 }
