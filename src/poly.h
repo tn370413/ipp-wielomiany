@@ -4,7 +4,7 @@
    @author Jakub Pawlewicz <pan@mimuw.edu.pl>
    @author Tomasz Necio <Tomasz.Necio@fuw.edu.pl>
    @copyright Uniwersytet Warszawski
-   @date 2017-04-09, TODO
+   @date 2017-04-24, TODO
 */
 
 #ifndef __POLY_H__
@@ -41,6 +41,7 @@ typedef struct Mono
 {
 	Poly p; ///< współczynnik
     poly_exp_t exp; ///< wykładnik
+    /* TODO */
 } Mono;
 
 /**
@@ -59,18 +60,20 @@ static inline Poly PolyFromCoeff(poly_coeff_t c) {
  * Tworzy wielomian tożsamościowo równy zeru.
  * @return wielomian
  */
+
 static inline Poly PolyZero() {
 	return PolyFromCoeff(0);
 }
 
 /**
  * Tworzy jednomian `p * x^e`.
- * Tworzony jednomian przejmuje na własność (kopiuje) wielomian @p p.
+ * Przejmuje na własność zawartość struktury wskazywanej przez @p p.
  * @param[in] p : wielomian - współczynnik jednomianu
  * @param[in] e : wykładnik
  * @return jednomian `p * x^e`
  */
-static inline Mono MonoFromPoly(Poly *p, poly_exp_t e) {
+static inline Mono MonoFromPoly(const Poly *p, poly_exp_t e)
+{
     return (Mono) {.p = *p, .exp = e};
 }
 
@@ -109,14 +112,14 @@ static inline void MonoDestroy(Mono *m) {
 }
 
 /**
- * Robi pełną kopię wielomianu.
+ * Robi pełną, głęboką kopię wielomianu.
  * @param[in] p : wielomian
  * @return skopiowany wielomian
  */
 Poly PolyClone(const Poly *p);
 
 /**
- * Robi pełną kopię jednomianu.
+ * Robi pełną, głęboką kopię jednomianu.
  * @param[in] m : jednomian
  * @return skopiowany jednomian
  */
@@ -137,6 +140,7 @@ Poly PolyAdd(const Poly *p, const Poly *q);
 
 /**
  * Sumuje listę jednomianów i tworzy z nich wielomian.
+ * Przejmuje na własność zawartość tablicy @p monos.
  * @param[in] count : liczba jednomianów
  * @param[in] monos : tablica jednomianów
  * @return wielomian będący sumą jednomianów
