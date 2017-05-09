@@ -53,6 +53,7 @@ static inline Poly PolyFromCoeff(poly_coeff_t c) {
 	Poly p;
 	p.constant = c;
 	p.monos = NULL;
+	p.monos_count = 0;
 	return p;
 }
 

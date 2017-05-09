@@ -59,7 +59,7 @@ Poly PolyAdd(const Poly *p, const Poly *q) {
 	bool end_of_polynomial;
 
 	while (!end_of_polynomial) {
-		if (p->monos[i].exp < &(q->monos[j]).exp) {
+		if (p->monos[i].exp < (q->monos[j]).exp) {
 			r.monos[i + j] = MonoClone(&(p->monos[i]));
 			i++;
 		} else if (&(p->monos[i]).exp > &(q->monos[j]).exp) {
@@ -147,6 +147,11 @@ struct MonosWithCount SimplifyMonoArray(unsigned count, Mono *monos) {
 	monos = SortMonosByExp(count, monos);
 	int i = 0;
 	for (int j = 1; j < count; j++) {
+		Poly coeff = monos[j].p;
+		if (PolyIsZero(&coeff)) {
+			continue;
+		}
+
 		if (monos[j].exp == monos[i].exp) {
 			monos[i] = MonoAdd(&(monos[i]), &(monos[j]));
 		} else {
@@ -201,7 +206,7 @@ Poly PolyNeg(const Poly *p) {
 	Poly r = PolyClone(p);
 	r.constant = -p->constant;
 	for (int i = 0; i < r.monos_count; i++) {
-		r.monos[i].p = PolyNeg(&(r.monos[i]));
+		r.monos[i].p = PolyNeg(&(r.monos[i]).p);
 	}
 	return r;
 }
@@ -250,7 +255,7 @@ poly_exp_t PolyDeg(const Poly *p) {
 		return -1;
 	}
 	int r = 0;
-	int m;
+	poly_exp_t m;
 	for (int i = 0; i < p->monos_count; i++) {
 		m = PolyDeg(&(p->monos[i]).p) + &(p->monos[i]).exp;
 		if (m > r) {
