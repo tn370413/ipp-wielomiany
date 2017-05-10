@@ -286,14 +286,68 @@ Poly PolySub(const Poly *p, const Poly *q) {
  * @param[in] var_idx : indeks zmiennej
  * @return stopień wielomianu @p p z względu na zmienną o indeksie @p var_idx
  */
-poly_exp_t PolyDegBy(const Poly *p, unsigned var_idx);
+poly_exp_t PolyDegBy(const Poly *p, unsigned var_idx){
+	if (PolyIsZero(p)) {
+		return -1;
+	}
+	if (PolyIsCoeff(p)) {
+		return 0;
+	}
+
+	if (var_idx == 0) {
+		return GetNthMonoPtr(p->monos, p->monos_count - 1)->exp;
+	}
+
+	poly_exp_t max_deg = 0;
+	poly_exp_t curr_deg = 0;
+
+	for (uint i = 0; i < p->monos_count; i++) {
+		curr_deg = PolyDegBy(&(GetNthMonoPtr(p->monos, i)->p), var_idx - 1);
+		if (curr_deg > max_deg) {
+			max_deg = curr_deg;
+		}
+	}
+
+	return max_deg;
+}
 
 /**
  * Zwraca stopień wielomianu (-1 dla wielomianu tożsamościowo równego zeru).
  * @param[in] p : wielomian
  * @return stopień wielomianu @p p
  */
-poly_exp_t PolyDeg(const Poly *p);
+poly_exp_t PolyDeg(const Poly *p) {
+	if (PolyIsZero(p)) {
+		return -1;
+	}
+	if (PolyIsCoeff(p)) {
+		return 0;
+	}
+
+	poly_exp_t max_deg = 0;
+	poly_exp_t curr_deg = 0;
+	Mono *m;
+
+	for (uint i = 0; i < p->monos_count; i++) {
+		m = GetNthMonoPtr(p->monos, i);
+		curr_deg = PolyDeg(&(m->p)) + m->exp;
+		if (curr_deg > max_deg) {
+			max_deg = curr_deg;
+		}
+	}
+
+	return max_deg;
+}
+
+
+bool PolyIsEq(const Poly *p, const Poly *q);
+
+bool MonoIsEq(const Mono *m, const Mono *o) {
+	if (m->exp != o->exp) {
+		return false;
+	}
+	return PolyIsEq(&(m->p), &(o->p));
+}
 
 /**
  * Sprawdza równość dwóch wielomianów.
@@ -301,7 +355,19 @@ poly_exp_t PolyDeg(const Poly *p);
  * @param[in] q : wielomian
  * @return `p = q`
  */
-bool PolyIsEq(const Poly *p, const Poly *q);
+bool PolyIsEq(const Poly *p, const Poly *q) {
+	if (p->scalar != q->scalar || p->monos_count != q->monos_count) {
+		return false;
+	}
+
+	for (uint i = 0; i < p->monos_count; i++) {
+		if (!MonoIsEq(GetNthMonoPtr(p->monos, i), GetNthMonoPtr(q->monos, i))) {
+			return false;
+		}
+	}
+
+	return true;
+}
 
 /**
  * Wylicza wartość wielomianu w punkcie @p x.
@@ -314,4 +380,6 @@ bool PolyIsEq(const Poly *p, const Poly *q);
  * @param[in] x
  * @return @f$p(x, x_0, x_1, \ldots)@f$
  */
-Poly PolyAt(const Poly *p, poly_coeff_t x);
+Poly PolyAt(const Poly *p, poly_coeff_t x) {
+
+}
