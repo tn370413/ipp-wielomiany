@@ -26,7 +26,7 @@ typedef int poly_exp_t;
  */
 typedef struct Poly
 {
-	poly_coeff_t constant;
+	poly_coeff_t scalar;
 	struct Mono *monos;
 	size_t monos_count;
 } Poly;
@@ -51,7 +51,7 @@ typedef struct Mono
  */
 static inline Poly PolyFromCoeff(poly_coeff_t c) {
 	Poly p;
-	p.constant = c;
+	p.scalar = c;
 	p.monos = NULL;
 	p.monos_count = 0;
 	return p;
@@ -72,10 +72,15 @@ static inline Poly PolyZero() {
  * @param[in] p : wielomian - współczynnik jednomianu
  * @param[in] e : wykładnik
  * @return jednomian `p * x^e`
+ *
+ * Przepisano jedynie w celu utrzymania spójności z resztą kodu.
  */
 static inline Mono MonoFromPoly(const Poly *p, poly_exp_t e)
 {
-    return (Mono) {.p = *p, .exp = e};
+	Mono m;
+	m.p = *p;
+	m.exp = e;
+	return m;
 }
 
 /**
@@ -93,7 +98,7 @@ static inline bool PolyIsCoeff(const Poly *p) {
  * @return Czy wielomian jest równy zero?
  */
 static inline bool PolyIsZero(const Poly *p) {
-	return (p->constant == 0 && p->monos_count == 0);
+	return (p->scalar == 0 && p->monos_count == 0);
 }
 
 /**

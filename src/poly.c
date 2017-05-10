@@ -3,285 +3,227 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <math.h>
+#include <stdint.h>
+
+#define uint unsigned int // TODO STG WITH THIS
 
 #include "poly.h"
 
-struct MonosWithCount {
-	int count;
-	Mono *list;
-};
 
+Mono GetNthMono(Mono *list, int n) {
+	return list[n];
+}
+
+Mono *GetNthMonoPtr(Mono *list, int n) {
+	return list + n * sizeof(Mono);
+}
+
+void InsertNthMono(Mono list[], int n, Mono m) {
+	list[n] = m;
+}
+
+/**
+ * Usuwa wielomian z pamięci.
+ * @param[in] p : wielomian
+ */
 void PolyDestroy(Poly *p) {
-	for (int i = 0; i < p->monos_count; i++) {
-		MonoDestroy(&(p->monos[i]));
+	for (uint i = 0; i < p->monos_count; i++) {
+		MonoDestroy(GetNthMonoPtr(p->monos, i));
 	}
 	free(p->monos);
-	p->constant = 0;
+	p->monos = NULL;
 	p->monos_count = 0;
 }
 
-Poly PolyClone(const Poly *p) {
-	Poly new_p;
-	new_p.constant = p->constant;
-	new_p.monos = calloc(sizeof(Mono), p->monos_count);
-	for (int i = 0; i < p->monos_count; i++) { /* MAKE INTO FUNCT. */
-		new_p.monos[i] = MonoClone(&(p->monos[i]));
+/**
+ * Robi pełną, głęboką kopię wielomianu.
+ * @param[in] p : wielomian
+ * @return skopiowany wielomian
+ */
+Poly PolyClone(const Poly *p){
+	Poly np;
+	np.scalar = p->scalar;
+	np.monos_count = p->monos_count;
+	np.monos = (Mono *) calloc(p->monos_count, sizeof(Mono));
+	for (uint i = 0; i < p->monos_count; i++) {
+		np.monos[i] = MonoClone(GetNthMonoPtr(p->monos, i));
 	}
-	new_p.monos_count = p->monos_count;
-	return new_p;
+	return np;
 }
 
-Mono MonoAdd(const Mono *a, const Mono *b) {
-	assert(a->exp == b->exp);
-	Mono m;
-	m.exp = a->exp;
-	m.p = PolyAdd(&(a->p), &(b->p));
-	return m;
-}
+/**
+ * Dodaje dwa wielomiany.
+ * @param[in] p : wielomian
+ * @param[in] q : wielomian
+ * @return `p + q`
+ */
 
-Poly PolyAdd(const Poly *p, const Poly *q) {
+Poly PolyAdd(const Poly *p, const Poly *q) { // O(n)
 	Poly r;
+	r.scalar = p->scalar + q->scalar;
+	r.monos_count = 0;
+	r.monos = (Mono *) calloc(p->monos_count + q->monos_count, sizeof(Mono));
+	// TODO realloc
 
-	if (PolyIsCoeff(p)) {
-		r = PolyClone(q);
-		r.constant += p->constant;
-		return r;
-	} else if (PolyIsCoeff(q)) {
-		r = PolyClone(p);
-		r.constant += q->constant;
-		return r;
-	}
+	uint i = 0;
+	uint j = 0;
+	bool end_of_list = false;
+	Mono pm, pq;
 
-	r.monos = calloc(sizeof(Mono), p->monos_count + q->monos_count);
-
-	int i = 0;
-	int j = 0;
-	bool end_of_polynomial;
-
-	while (!end_of_polynomial) {
-		if (p->monos[i].exp < (q->monos[j]).exp) {
-			r.monos[i + j] = MonoClone(&(p->monos[i]));
-			i++;
-		} else if (&(p->monos[i]).exp > &(q->monos[j]).exp) {
-			r.monos[i + j] = MonoClone(&(q->monos[j]));
-			j++;
-		} else {
-			r.monos[i + j] = MonoAdd(&(p->monos[i]), &(q->monos[j]));
-			i++;
-			j++;
-		}
-
+	while (!end_of_list) {
 		if (i == p->monos_count) {
-			end_of_polynomial = true;
 			for (; j < q->monos_count; j++) {
-				r.monos[i + j] = MonoClone(&(q->monos[j]));
+				InsertNthMono(r.monos, r.monos_count, q->monos[j]);
 			}
+			end_of_list = true; // TODO BREAK
 		} else if (j == q->monos_count) {
-			end_of_polynomial = true;
-			for (; i < p->monos_count; i++){
-				r.monos[i + j] = MonoClone(&(p->monos[i]));
+			for (; i < p->monos_count; i++) {
+				InsertNthMono(r.monos, r.monos_count, p->monos[i]);
+			}
+			end_of_list = true;
+		} else {
+
+			pm = GetNthMono(p->monos, i);
+			pq = GetNthMono(p->monos, j);
+
+			if (pm.exp == pq.exp) {
+				Poly m_coeff = PolyAdd(&(pm.p), &(pq.p));
+				InsertNthMono(r.monos, r.monos_count, MonoFromPoly(&m_coeff, pm.exp));
+				i++;
+				j++;
+			} else if (pm.exp > pq.exp) {
+				InsertNthMono(r.monos, r.monos_count, pq);
+				j++;
+			} else /* pm.exp < pq.exp */ {
+				InsertNthMono(r.monos, r.monos_count, pm);
+				i++;
 			}
 		}
+
+		r.monos_count++;
 	}
-	r.monos_count = i + j;
 	return r;
 }
 
-int MonoExpCompare(const Mono *a, const Mono *b) {
-	if (a->exp == b->exp) {
-		return 0;
-	} else if (a->exp < b->exp) {
-		return -1;
-	} else {
-		return 1;
-	}
-}
-
-Mono *SortMonosByExp(unsigned count, Mono monos[]) {
-	qsort(monos, count, sizeof(Mono), MonoExpCompare);
-	return monos;
-}
-/* MAKE FUNCTION FOR SIMPLIFYING MONOS */
-Poly PolyAddMonos(unsigned count, const Mono monos[]){
+/**
+ * Sumuje listę jednomianów i tworzy z nich wielomian.
+ * Przejmuje na własność zawartość tablicy @p monos.
+ * @param[in] count : liczba jednomianów
+ * @param[in] monos : tablica jednomianów
+ * @return wielomian będący sumą jednomianów
+ */
+Poly PolyAddMonos(unsigned count, const Mono *monos){
 	Poly p;
-	p.constant = 0;
+	p.scalar = 0;
+	p.monos = monos;
 	p.monos_count = count;
-	p.monos = calloc(sizeof(Mono), count);
-
-	monos = SortMonosByExp(count, monos);
-
-	int j = 0;
-	for (int i = 0; i < count; i++) {
-
-		if (monos[i].exp == 0) {
-			if (PolyIsCoeff(&(monos[i].p))){
-				p.constant += monos[i].p.constant;
-				continue;
-			}
-			p.monos[0] = monos[0];
-			continue;
-		}
-
-		if (p.monos != NULL && monos[i].exp == p.monos[j].exp) {
-			p.monos[j].p = PolyAdd(&(p.monos[j].p), &(monos[i].p));
-		} else {
-			j++;
-			p.monos[j] = monos[i];
-		}
-	}
-
 	return p;
 }
 
-Mono MonoScalarMul(const Mono *a, const poly_coeff_t scalar) {
-	Mono b = MonoClone(a);
-	b.p.constant *= scalar;
-	for (int i = 0; i < b.p.monos_count; i++) {
-		b.p.monos[i] = MonoScalarMul(&(b.p.monos[i]), scalar);
-	}
-		 // TYPES – POINTER OR COPY??
-	return b;
-}
+/**
+ * Mnoży dwa wielomiany.
+ * @param[in] p : wielomian
+ * @param[in] q : wielomian
+ * @return `p * q`
+ */
 
-struct MonosWithCount SimplifyMonoArray(unsigned count, Mono *monos) {
-	monos = SortMonosByExp(count, monos);
-	int i = 0;
-	for (int j = 1; j < count; j++) {
-		Poly coeff = monos[j].p;
-		if (PolyIsZero(&coeff)) {
-			continue;
-		}
-
-		if (monos[j].exp == monos[i].exp) {
-			monos[i] = MonoAdd(&(monos[i]), &(monos[j]));
-		} else {
-			i++;
-			monos[i] = monos[j];
-		}
+Poly PolyScalarMul(const Poly *p, poly_coeff_t scalar) {
+	if (PolyIsCoeff(p)) {
+		return PolyFromCoeff(p->scalar * scalar);
 	}
 
-	struct MonosWithCount r;
-	r.list = monos;
-	r.count = i + 1;
+	Poly r;
+	r.scalar = p->scalar * scalar;
+	r.monos_count = p->monos_count;
+	r.monos = (Mono *) calloc(r.monos_count, sizeof(Mono));
+	for (uint i = 0; i < p->monos_count; i++) {
+		InsertNthMono(r.monos, i,
+					  MonoScalarMul(GetNthMonoPtr(p->monos, i), scalar));
+	}
 	return r;
 }
 
-Mono MonoMul(const Mono *a, const Mono *b) {
+Mono MonoScalarMul(const Mono *m, poly_coeff_t scalar) {
 	Mono r;
-	r.p = PolyMul(&(a->p), &(b->p));
-	r.exp = a->exp + b->exp;
+	r.exp = m->exp;
+	r.p = PolyScalarMul(&(m->p), scalar);
 	return r;
 }
 
 Poly PolyMul(const Poly *p, const Poly *q) {
-	Poly r;
-	r.constant = p->constant * q->constant;
-	int monos_count = (p->monos_count + 1) * (q->monos_count + 1);
-	Mono monos[monos_count];
-	int index = 0;
+	Poly r1 = PolyScalarMul(p, q->scalar);
+	Poly r2 = PolyScalarMul(q, p->scalar);
 
-	for (int i = 0; i < p->monos_count; i++) {
-		for (int j = 0; j < q->monos_count; j++) {
-			monos[index] = MonoMul(&(p->monos[i]), &(q->monos[j]));
-			index++;
+	Poly r = PolyAdd(r1, r2);
+	r.scalar = p->scalar * q->scalar;
+
+	Poly r3;
+	r3.scalar = 0;
+	r3.monos_count = 0;
+	r3.monos = (Mono *) calloc(p->monos_count * q->monos_count, sizeof(Mono));
+
+	for (uint i = 0; i < p->monos_count, i++) {
+		for (uint j = 0; j < q->monos_count; j++) {
+
 		}
 	}
 
-	for (int i = 0; i < p->monos_count; i++) {
-		monos[index] = MonoScalarMul(&(p->monos[i]), q->constant);
-		index++;
-	}
-
-	for (int j = 0; j < q->monos_count; j++) {
-		monos[index] = MonoScalarMul(&(q->monos[j]), p->constant);
-		index++;
-	}
-
-	struct MonosWithCount m = SimplifyMonoArray(monos_count, monos);
-	r = PolyAddMonos(m.count, m.list);
-	return r;
+	PolyDestroy(r1);
+	PolyDestroy(r2);
 }
 
-Poly PolyNeg(const Poly *p) {
-	Poly r = PolyClone(p);
-	r.constant = -p->constant;
-	for (int i = 0; i < r.monos_count; i++) {
-		r.monos[i].p = PolyNeg(&(r.monos[i]).p);
-	}
-	return r;
-}
+/**
+ * Zwraca przeciwny wielomian.
+ * @param[in] p : wielomian
+ * @return `-p`
+ */
+Poly PolyNeg(const Poly *p);
 
-Poly PolySub(const Poly *p, const Poly *q) {
-	Poly minus_q = PolyNeg(q);
-	return PolyAdd(p, &minus_q);
-}
+/**
+ * Odejmuje wielomian od wielomianu.
+ * @param[in] p : wielomian
+ * @param[in] q : wielomian
+ * @return `p - q`
+ */
+Poly PolySub(const Poly *p, const Poly *q);
 
-Poly PolyScalarMul(const Poly *p, poly_coeff_t scalar) {
-	Poly r = PolyClone(p);
-	for (int i = 0; i < p->monos_count; i++) {
-		r.monos[i] = MonoScalarMul(&(p->monos[i]), scalar);
-	}
-	return r;
-}
+/**
+ * Zwraca stopień wielomianu ze względu na zadaną zmienną (-1 dla wielomianu
+ * tożsamościowo równego zeru).
+ * Zmienne indeksowane są od 0.
+ * Zmienna o indeksie 0 oznacza zmienną główną tego wielomianu.
+ * Większe indeksy oznaczają zmienne wielomianów znajdujących się
+ * we współczynnikach.
+ * @param[in] p : wielomian
+ * @param[in] var_idx : indeks zmiennej
+ * @return stopień wielomianu @p p z względu na zmienną o indeksie @p var_idx
+ */
+poly_exp_t PolyDegBy(const Poly *p, unsigned var_idx);
 
-Poly PolyAt(const Poly *p, poly_coeff_t x) {
-	Poly r = PolyZero();
-	for (int i = 0; i < p->monos_count; i++) {
-		poly_exp_t exponent = p->monos[i].exp;
-		Poly q = PolyScalarMul(&(p->monos[i].p), pow(x, exponent));
-		r = PolyAdd(&r, &q);
-	}
-	return r;
-}
+/**
+ * Zwraca stopień wielomianu (-1 dla wielomianu tożsamościowo równego zeru).
+ * @param[in] p : wielomian
+ * @return stopień wielomianu @p p
+ */
+poly_exp_t PolyDeg(const Poly *p);
 
-poly_exp_t PolyDegBy(const Poly *p, unsigned var_idx) {
-	Poly r;
+/**
+ * Sprawdza równość dwóch wielomianów.
+ * @param[in] p : wielomian
+ * @param[in] q : wielomian
+ * @return `p = q`
+ */
+bool PolyIsEq(const Poly *p, const Poly *q);
 
-	if (PolyIsZero(p)) {
-		return -1;
-	} else if (PolyIsCoeff(p)) {
-		return 0;
-	}
-
-	for (int i = 0; i < var_idx; i++) {
-		r = PolyAt(p, 1);
-	}
-
-	return r.monos[r.monos_count - 1].exp;
-}
-
-poly_exp_t PolyDeg(const Poly *p) {
-	if (PolyIsZero(p)) {
-		return -1;
-	}
-	int r = 0;
-	poly_exp_t m;
-	for (int i = 0; i < p->monos_count; i++) {
-		m = PolyDeg(&(p->monos[i]).p) + &(p->monos[i]).exp;
-		if (m > r) {
-			r = m;
-		}
-	}
-	return r;
-}
-
-bool MonoIsEq(const Mono *p, const Mono *q) {
-	if (p->exp != q->exp) {
-		return false;
-	}
-	return PolyIsEq(&(p->p), &(q->p));
-}
-
-bool PolyIsEq(const Poly *p, const Poly *q) {
-	if (p->constant != q->constant || p->monos_count != q->monos_count) {
-		return false;
-	}
-
-	for (int i = 0; i < p->monos_count; i++) {
-		if (!MonoIsEq(&(p->monos[i]), &(q->monos[i]))) {
-			return false;
-		}
-	}
-
-	return true;
-}
+/**
+ * Wylicza wartość wielomianu w punkcie @p x.
+ * Wstawia pod pierwszą zmienną wielomianu wartość @p x.
+ * W wyniku może powstać wielomian, jeśli współczynniki są wielomianem
+ * i zmniejszane są indeksy zmiennych w takim wielomianie o jeden.
+ * Formalnie dla wielomianu @f$p(x_0, x_1, x_2, \ldots)@f$ wynikiem jest
+ * wielomian @f$p(x, x_0, x_1, \ldots)@f$.
+ * @param[in] p
+ * @param[in] x
+ * @return @f$p(x, x_0, x_1, \ldots)@f$
+ */
+Poly PolyAt(const Poly *p, poly_coeff_t x);
