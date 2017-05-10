@@ -127,6 +127,8 @@ Poly PolyAddMonos(unsigned count, const Mono *monos){
  * @return `p * q`
  */
 
+Mono MonoScalarMul(const Mono *m, poly_coeff_t scalar);
+
 Poly PolyScalarMul(const Poly *p, poly_coeff_t scalar) {
 	if (PolyIsCoeff(p)) {
 		return PolyFromCoeff(p->scalar * scalar);
@@ -150,26 +152,94 @@ Mono MonoScalarMul(const Mono *m, poly_coeff_t scalar) {
 	return r;
 }
 
+int MonoExpCompare(const Mono *a, const Mono *b) {
+	if (a->exp == b->exp) {
+		return 0;
+	} else if (a->exp < b->exp) {
+		return -1;
+	} else {
+		return 1;
+	}
+}
+
+void SortMonosByExp(unsigned count, Mono monos[]) {
+	qsort(monos, count, sizeof(Mono), MonoExpCompare);
+//	return monos;
+}
+
+void SimplifyPoly(Poly *p) {
+	SortMonosByExp(p->monos_count, p->monos);
+	uint index = 0;
+	for (uint i = 1; i < p->monos_count; i++) {
+		Mono mi = GetNthMono(p->monos, i);
+		Mono mp = GetNthMono(p->monos, index);
+		if (mi.exp == mp.exp) {
+			Poly np = PolyAdd(&mi.p, &mp.p);
+			PolyDestroy(&mi.p);
+			PolyDestroy(&mp.p);
+			p->monos[index].p = np;
+		} else {
+			index++;
+			p->monos[index] = mi;
+		}
+	}
+	p->monos_count = index + 1;
+}
+
+Poly PolyMul(const Poly *p, const Poly *q);
+
+Mono MonoMul(const Mono *m, const Mono *o) {
+	Mono r;
+	r.exp = m->exp + o->exp;
+	r.p = PolyMul(&(m->p), &(o->p));
+	return r;
+}
+
 Poly PolyMul(const Poly *p, const Poly *q) {
+	if (PolyIsCoeff(p)) {
+		return PolyScalarMul(q, p->scalar);
+	}
+	if (PolyIsCoeff(q)) {
+		return PolyScalarMul(p, q->scalar);
+	}
+
 	Poly r1 = PolyScalarMul(p, q->scalar);
 	Poly r2 = PolyScalarMul(q, p->scalar);
 
-	Poly r = PolyAdd(r1, r2);
-	r.scalar = p->scalar * q->scalar;
+	Poly r12 = PolyAdd(&r1, &r2);
+	r12.scalar = p->scalar * q->scalar;
 
 	Poly r3;
 	r3.scalar = 0;
-	r3.monos_count = 0;
-	r3.monos = (Mono *) calloc(p->monos_count * q->monos_count, sizeof(Mono));
+	r3.monos_count = p->monos_count * q->monos_count;
+	r3.monos = (Mono *) calloc(r3.monos_count, sizeof(Mono));
 
-	for (uint i = 0; i < p->monos_count, i++) {
+	for (uint i = 0; i < p->monos_count; i++) {
 		for (uint j = 0; j < q->monos_count; j++) {
-
+			Mono *mp = GetNthMonoPtr(p->monos, i);
+			Mono *mq = GetNthMonoPtr(q->monos, j);
+			InsertNthMono(r3.monos, j + q->monos_count * i,
+						  MonoMul(mp, mq));
 		}
 	}
+	SimplifyPoly(&r3);
 
-	PolyDestroy(r1);
-	PolyDestroy(r2);
+	Poly r = PolyAdd(&r12, &r3);
+
+	PolyDestroy(&r1);
+	PolyDestroy(&r2);
+	PolyDestroy(&r12);
+	PolyDestroy(&r3);
+
+	return r;
+}
+
+
+Mono MonoNeg(const Mono *m) {
+	Mono r;
+	r.exp = m->exp;
+	r.p = PolyNeg(&(m->p));
+	return r;
 }
 
 /**
@@ -177,7 +247,20 @@ Poly PolyMul(const Poly *p, const Poly *q) {
  * @param[in] p : wielomian
  * @return `-p`
  */
-Poly PolyNeg(const Poly *p);
+Poly PolyNeg(const Poly *p) {
+	if (PolyIsCoeff(p)) {
+		return PolyFromCoeff(-p->scalar);
+	}
+
+	Poly r;
+	r.scalar = -p->scalar;
+	r.monos_count = p->monos_count;
+	r.monos = (Mono *) calloc(r.monos_count, sizeof(Mono));
+	for (uint i = 0; i < p->monos_count; i++) {
+		InsertNthMono(r.monos, i, MonoNeg(GetNthMonoPtr(p->monos, i)));
+	}
+	return r;
+}
 
 /**
  * Odejmuje wielomian od wielomianu.
@@ -185,7 +268,12 @@ Poly PolyNeg(const Poly *p);
  * @param[in] q : wielomian
  * @return `p - q`
  */
-Poly PolySub(const Poly *p, const Poly *q);
+Poly PolySub(const Poly *p, const Poly *q) {
+	Poly n = PolyNeg(q);
+	Poly r = PolyAdd(p, &n);
+	PolyDestroy(&n);
+	return r;
+}
 
 /**
  * Zwraca stopień wielomianu ze względu na zadaną zmienną (-1 dla wielomianu
