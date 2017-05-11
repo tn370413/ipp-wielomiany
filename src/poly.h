@@ -114,7 +114,7 @@ void PolyDestroy(Poly *p);
 static inline void MonoDestroy(Mono *m) {
 	PolyDestroy(&(m->p));
 	m->p = PolyZero();
-	m->exp = 0;
+	m->exp = -1;
 }
 
 /**

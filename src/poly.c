@@ -27,9 +27,14 @@ void InsertNthMono(Mono list[], int n, Mono m) {
  * @param[in] p : wielomian
  */
 void PolyDestroy(Poly *p) {
+	if (PolyIsCoeff(p)) {
+		return;
+	}
+
 	for (uint i = 0; i < p->monos_count; i++) {
 		MonoDestroy(GetNthMonoPtr(p->monos, i));
 	}
+
 	free(p->monos);
 	p->monos = NULL;
 	p->monos_count = 0;
@@ -115,7 +120,10 @@ Poly PolyAdd(const Poly *p, const Poly *q) { // O(n)
 Poly PolyAddMonos(unsigned count, const Mono *monos){
 	Poly p;
 	p.scalar = 0;
-	p.monos = monos;
+	p.monos = calloc(count, sizeof(Mono));
+	for (uint i = 0; i < count; i++) {
+		p.monos[i] = monos[i];
+	}
 	p.monos_count = count;
 	return p;
 }
@@ -170,6 +178,7 @@ void SortMonosByExp(unsigned count, Mono monos[]) {
 void SimplifyPoly(Poly *p) {
 	SortMonosByExp(p->monos_count, p->monos);
 	uint index = 0;
+	/* TODO: take care of monos with exp=0 e.g. y, yz, 7x^0 etc. */
 	for (uint i = 1; i < p->monos_count; i++) {
 		Mono mi = GetNthMono(p->monos, i);
 		Mono mp = GetNthMono(p->monos, index);
