@@ -57,7 +57,8 @@ int main() {
 	Poly p4 = PolyAddMonos(1, monos2); // p4(x) = 14x^3
 	Poly p5 = PolyAddMonos(2, monos1); // p5(x) = 7x^2 + 14y^3x^4
 
-	Poly p6 = PolyAdd(&p4, &p5); // p6(x) = 7x^2 + 14x^3 + 14y^3x^4
+	Poly p6 = PolyAdd(&p5, &p4); // p6(x) = 7x^2 + 14x^3 + 14y^3x^4
+	poly_coeff_t r = PolyAt(&p6, 3).scalar; // 9*7 + 14 * 27 = 441
 
 	PolyDestroy(&p);
 	PolyDestroy(&p1);
@@ -66,5 +67,5 @@ int main() {
 	PolyDestroy(&p4);
 	PolyDestroy(&p5);
 
-	return PolyAt(&p6, 3).scalar; // 9*7 + 14 * 27 = 441
+	return r;
 }

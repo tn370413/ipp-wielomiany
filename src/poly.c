@@ -22,6 +22,22 @@ void InsertNthMono(Mono list[], int n, Mono m) {
 	list[n] = m;
 }
 
+
+int MonoExpCompare(const Mono *a, const Mono *b) {
+	if (a->exp == b->exp) {
+		return 0;
+	} else if (a->exp < b->exp) {
+		return -1;
+	} else {
+		return 1;
+	}
+}
+
+void SortMonosByExp(unsigned count, Mono monos[]) {
+	qsort(monos, count, sizeof(Mono), MonoExpCompare);
+}
+
+
 /**
  * Usuwa wielomian z pamięci.
  * @param[in] p : wielomian
@@ -72,41 +88,48 @@ Poly PolyAdd(const Poly *p, const Poly *q) { // O(n)
 
 	uint i = 0;
 	uint j = 0;
-	bool end_of_list = false;
-	Mono pm, pq;
 
-	while (!end_of_list) {
+	Mono *pm;
+	Mono *qm;
+
+	while (true) {
 		if (i == p->monos_count) {
 			for (; j < q->monos_count; j++) {
-				InsertNthMono(r.monos, r.monos_count, q->monos[j]);
+				InsertNthMono(r.monos, r.monos_count,
+							  MonoClone(GetNthMonoPtr(q->monos, j)));
+				r.monos_count++;
 			}
-			end_of_list = true; // TODO BREAK
+			break; // TODO BREAK
 		} else if (j == q->monos_count) {
 			for (; i < p->monos_count; i++) {
-				InsertNthMono(r.monos, r.monos_count, p->monos[i]);
+				InsertNthMono(r.monos, r.monos_count,
+							  MonoClone(GetNthMonoPtr(p->monos, i)));
+				r.monos_count++;
 			}
-			end_of_list = true;
+			break;
 		} else {
 
-			pm = GetNthMono(p->monos, i);
-			pq = GetNthMono(p->monos, j);
+			pm = GetNthMonoPtr(p->monos, i);
+			qm = GetNthMonoPtr(q->monos, j);
 
-			if (pm.exp == pq.exp) {
-				Poly m_coeff = PolyAdd(&(pm.p), &(pq.p));
-				InsertNthMono(r.monos, r.monos_count, MonoFromPoly(&m_coeff, pm.exp));
+			if (pm->exp == qm->exp) {
+				Poly m_coeff = PolyAdd(&(pm->p), &(qm->p));
+				InsertNthMono(r.monos, r.monos_count,
+							  MonoFromPoly(&m_coeff, pm->exp));
 				i++;
 				j++;
-			} else if (pm.exp > pq.exp) {
-				InsertNthMono(r.monos, r.monos_count, pq);
+			} else if (pm->exp > qm->exp) {
+				InsertNthMono(r.monos, r.monos_count, MonoClone(qm));
 				j++;
-			} else /* pm.exp < pq.exp */ {
-				InsertNthMono(r.monos, r.monos_count, pm);
+			} else /* pm->exp < pq->exp */ {
+				InsertNthMono(r.monos, r.monos_count, MonoClone(pm));
 				i++;
 			}
 		}
 
 		r.monos_count++;
 	}
+	//SortMonosByExp(r.monos_count, r.monos);
 	return r;
 }
 
@@ -124,6 +147,7 @@ Poly PolyAddMonos(unsigned count, const Mono *monos){
 	for (uint i = 0; i < count; i++) {
 		p.monos[i] = monos[i];
 	}
+	SortMonosByExp(count, p.monos);
 	p.monos_count = count;
 	return p;
 }
@@ -160,20 +184,6 @@ Mono MonoScalarMul(const Mono *m, poly_coeff_t scalar) {
 	return r;
 }
 
-int MonoExpCompare(const Mono *a, const Mono *b) {
-	if (a->exp == b->exp) {
-		return 0;
-	} else if (a->exp < b->exp) {
-		return -1;
-	} else {
-		return 1;
-	}
-}
-
-void SortMonosByExp(unsigned count, Mono monos[]) {
-	qsort(monos, count, sizeof(Mono), MonoExpCompare);
-//	return monos;
-}
 
 void SimplifyPoly(Poly *p) {
 	SortMonosByExp(p->monos_count, p->monos);
@@ -390,5 +400,24 @@ bool PolyIsEq(const Poly *p, const Poly *q) {
  * @return @f$p(x, x_0, x_1, \ldots)@f$
  */
 Poly PolyAt(const Poly *p, poly_coeff_t x) {
+	if (PolyIsCoeff(p)) {
+		return *p;
+	}
 
+	Poly r = PolyFromCoeff(p->scalar);
+	Poly nr = r;
+	Poly q;
+	poly_coeff_t val;
+	poly_exp_t exponent;
+
+	for (uint i = 0; i < p->monos_count; i++) {
+		exponent = p->monos[i].exp;
+		val = pow(x, exponent);
+		q = PolyScalarMul(&(p->monos[i].p), val);
+		nr = PolyAdd(&r, &q);
+	//	PolyDestroy(&q); WTF
+	//	PolyDestroy(&r); WTF
+		r = nr;
+	}
+	return nr;
 }

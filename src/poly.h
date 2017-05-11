@@ -40,8 +40,8 @@ typedef struct Poly
 typedef struct Mono
 {
 	Poly p; ///< współczynnik
-    poly_exp_t exp; ///< wykładnik
-    /* TODO */
+	poly_exp_t exp; ///< wykładnik
+	/* TODO */
 } Mono;
 
 /**
