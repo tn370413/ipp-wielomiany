@@ -185,21 +185,32 @@ Mono MonoScalarMul(const Mono *m, poly_coeff_t scalar) {
 }
 
 
-void SimplifyPoly(Poly *p) {
+void SimplifyPoly(Poly *p) { // I'M SURE that this shit IS gonna crash
 	SortMonosByExp(p->monos_count, p->monos);
 	uint index = 0;
 	/* TODO: take care of monos with exp=0 e.g. y, yz, 7x^0 etc. */
 	for (uint i = 1; i < p->monos_count; i++) {
 		Mono mi = GetNthMono(p->monos, i);
 		Mono mp = GetNthMono(p->monos, index);
+
+		if (mi.exp == 0 && PolyIsCoeff(&(mi.p))) {
+			p->scalar += mi.p.scalar;
+			continue;
+		}
+
+		if (mp.exp == 0 && PolyIsCoeff(&(mp.p))) {
+			InsertNthMono(p->monos, index, mi);
+			continue;
+		}
+
 		if (mi.exp == mp.exp) {
 			Poly np = PolyAdd(&mi.p, &mp.p);
-			PolyDestroy(&mi.p);
-			PolyDestroy(&mp.p);
-			p->monos[index].p = np;
+			PolyDestroy(&(mi.p));
+			PolyDestroy(&(mp.p));
+			InsertNthMono(p->monos, index, np);
 		} else {
 			index++;
-			p->monos[index] = mi;
+			InsertNthMono(p->monos, index, mi);
 		}
 	}
 	p->monos_count = index + 1;
@@ -253,7 +264,6 @@ Poly PolyMul(const Poly *p, const Poly *q) {
 	return r;
 }
 
-
 Mono MonoNeg(const Mono *m) {
 	Mono r;
 	r.exp = m->exp;
@@ -268,11 +278,11 @@ Mono MonoNeg(const Mono *m) {
  */
 Poly PolyNeg(const Poly *p) {
 	if (PolyIsCoeff(p)) {
-		return PolyFromCoeff(-p->scalar);
+		return PolyFromCoeff(-(p->scalar));
 	}
 
 	Poly r;
-	r.scalar = -p->scalar;
+	r.scalar = -(p->scalar);
 	r.monos_count = p->monos_count;
 	r.monos = (Mono *) calloc(r.monos_count, sizeof(Mono));
 	for (uint i = 0; i < p->monos_count; i++) {
@@ -415,8 +425,8 @@ Poly PolyAt(const Poly *p, poly_coeff_t x) {
 		val = pow(x, exponent);
 		q = PolyScalarMul(&(p->monos[i].p), val);
 		nr = PolyAdd(&r, &q);
-	//	PolyDestroy(&q); WTF
-	//	PolyDestroy(&r); WTF
+		PolyDestroy(&q);
+		PolyDestroy(&r);
 		r = nr;
 	}
 	return nr;
