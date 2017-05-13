@@ -15,7 +15,7 @@ Mono GetNthMono(Mono *list, int n) {
 }
 
 Mono *GetNthMonoPtr(Mono *list, int n) {
-	return list + n * sizeof(Mono);
+	return &(list[n]);
 }
 
 void InsertNthMono(Mono list[], int n, Mono m) {
@@ -99,7 +99,7 @@ Poly PolyAdd(const Poly *p, const Poly *q) { // O(n)
 							  MonoClone(GetNthMonoPtr(q->monos, j)));
 				r.monos_count++;
 			}
-			break; // TODO BREAK
+			break;
 		} else if (j == q->monos_count) {
 			for (; i < p->monos_count; i++) {
 				InsertNthMono(r.monos, r.monos_count,
@@ -114,20 +114,25 @@ Poly PolyAdd(const Poly *p, const Poly *q) { // O(n)
 
 			if (pm->exp == qm->exp) {
 				Poly m_coeff = PolyAdd(&(pm->p), &(qm->p));
+				if (!(PolyIsZero(&m_coeff))) {
 				InsertNthMono(r.monos, r.monos_count,
 							  MonoFromPoly(&m_coeff, pm->exp));
+				r.monos_count++;
+				}
 				i++;
 				j++;
 			} else if (pm->exp > qm->exp) {
 				InsertNthMono(r.monos, r.monos_count, MonoClone(qm));
+				r.monos_count++;
 				j++;
 			} else /* pm->exp < pq->exp */ {
 				InsertNthMono(r.monos, r.monos_count, MonoClone(pm));
+				r.monos_count++;
 				i++;
 			}
 		}
 
-		r.monos_count++;
+
 	}
 	//SortMonosByExp(r.monos_count, r.monos);
 	return r;
@@ -143,12 +148,24 @@ Poly PolyAdd(const Poly *p, const Poly *q) { // O(n)
 Poly PolyAddMonos(unsigned count, const Mono *monos){
 	Poly p;
 	p.scalar = 0;
+	p.monos_count = 0;
 	p.monos = calloc(count, sizeof(Mono));
+	uint index = 0;
+	Mono *mptr;
 	for (uint i = 0; i < count; i++) {
-		p.monos[i] = monos[i];
+		mptr = GetNthMonoPtr(monos, i);
+		if (PolyIsZero(&(mptr->p))) {
+			continue;
+		}
+		if (PolyIsCoeff(&(mptr->p)) && mptr->exp == 0) {
+			p.scalar += mptr->p.scalar;
+		} else {
+			p.monos[index] = *mptr;
+			p.monos_count++;
+			index++;
+		}
 	}
-	SortMonosByExp(count, p.monos);
-	p.monos_count = count;
+	SortMonosByExp(p.monos_count, p.monos);
 	return p;
 }
 
@@ -207,7 +224,8 @@ void SimplifyPoly(Poly *p) { // I'M SURE that this shit IS gonna crash
 			Poly np = PolyAdd(&mi.p, &mp.p);
 			PolyDestroy(&(mi.p));
 			PolyDestroy(&(mp.p));
-			InsertNthMono(p->monos, index, np);
+			Mono nm = MonoFromPoly(&np, mi.exp);
+			InsertNthMono(p->monos, index, nm);
 		} else {
 			index++;
 			InsertNthMono(p->monos, index, mi);
