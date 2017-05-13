@@ -26,9 +26,9 @@ typedef int poly_exp_t;
  */
 typedef struct Poly
 {
-	poly_coeff_t scalar;
-	struct Mono *monos;
-	size_t monos_count;
+	poly_coeff_t scalar; ///< wyraz wolny wielomianu (skalar)
+	struct Mono *monos; ///< tablica jednomianów niebędących skalarami
+	size_t monos_count; ///< liczba elementów tablicy monos
 } Poly;
 
 /**
@@ -41,7 +41,6 @@ typedef struct Mono
 {
 	Poly p; ///< współczynnik
 	poly_exp_t exp; ///< wykładnik
-	/* TODO */
 } Mono;
 
 /**
@@ -72,8 +71,6 @@ static inline Poly PolyZero() {
  * @param[in] p : wielomian - współczynnik jednomianu
  * @param[in] e : wykładnik
  * @return jednomian `p * x^e`
- *
- * Przepisano jedynie w celu utrzymania spójności z resztą kodu.
  */
 static inline Mono MonoFromPoly(const Poly *p, poly_exp_t e)
 {
@@ -84,7 +81,7 @@ static inline Mono MonoFromPoly(const Poly *p, poly_exp_t e)
 }
 
 /**
- * Sprawdza, czy wielomian jest współczynnikiem.
+ * Sprawdza, czy wielomian jest skalarem.
  * @param[in] p : wielomian
  * @return Czy wielomian jest skalarem?
  */

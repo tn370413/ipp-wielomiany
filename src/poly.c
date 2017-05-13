@@ -5,36 +5,135 @@
 #include <math.h>
 #include <stdint.h>
 
-#define uint unsigned int // TODO STG WITH THIS
-
 #include "poly.h"
 
+/**
+ * Używana konwencja:
+ * list – nazwa tablicy
+ * n – indeks na tablicy wejściowej
+ * p, q – wielomiany wejściowe
+ * m, o – jednomiany wejściowe
+ * r – wynik działania funkcji
+ * i, j – indeksy pętli for przechodzących przez listy jednomianów w p i q odp.
+ * k – indeks na tablicy jednomianów wielomianu wynikowego
+ */
 
-Mono GetNthMono(Mono *list, int n) {
+
+/**
+ * Zwraca n-ty jednomian na tablicy przez wartość.
+ * @param[in] list : tablice jednomianów
+ * @param[in] n : indeks jednomianu
+ * @return `list[n]`
+ */
+Mono GetNthMono(const Mono *list, int n) {
 	return list[n];
 }
 
-Mono *GetNthMonoPtr(Mono *list, int n) {
-	return &(list[n]);
+/**
+ * Zwraca wskaźnik na n-ty jednomian na tablicy.
+ * Celem kastowania (cast) na Mono* jest uniknięcie problemu z tym, że niektóre
+ * funkcje wymagają Mono*, a niektóre (const Mono*).
+ * Mono* jest typem bardziej uniwersalnym. Lepiej zrobić to kastowanie w tym
+ * miejscu niż za każdym razem gdy chcemy uzyskać wskaźnik na element listy.
+ *
+ * @param[in] list : tablica jednomianów
+ * @param[in] n : indeks jednomianu
+ * @return wskaźnik na `list[n]`
+ */
+Mono *GetNthMonoPtr(const Mono *list, int n) {
+	return (Mono *) &(list[n]);
 }
 
+/**
+ * Zapisuje jednomian w n-tym polu tablicy.
+ * @param[in] list : tablica jednomianów
+ * @param[in] n : indeks pola tablicy
+ * @param[in] m : jednomian do wstawienia
+ */
 void InsertNthMono(Mono list[], int n, Mono m) {
 	list[n] = m;
 }
 
-
-int MonoExpCompare(const Mono *a, const Mono *b) {
-	if (a->exp == b->exp) {
+/**
+ * Porównuje jednomiany na podstawie ich wykładników
+ * @param[in] a : jednomian
+ * @param[in] b : jednomian
+ * @return znak róznicy wykładników a i b
+ */
+int MonoExpCompare(const Mono *m, const Mono *o) {
+	if (m->exp == o->exp) {
 		return 0;
-	} else if (a->exp < b->exp) {
+	} else if (m->exp < o->exp) {
 		return -1;
 	} else {
 		return 1;
 	}
 }
 
-void SortMonosByExp(unsigned count, Mono monos[]) {
-	qsort(monos, count, sizeof(Mono), MonoExpCompare);
+/* Funkcja pomocnicza, żeby kompilator nie krzyczał o złych typach wskaźników */
+int MonoExpCompareForQsort(const void *m, const void *o) {
+	return MonoExpCompare((Mono *) m, (Mono *) o);
+}
+
+/**
+ * Sortuje w miejscu tablicę jednomianów
+ * @param[in] list : tablica jednomianów
+ * @param[in] count : liczba elementów tablicy jednomianów
+ */
+void SortMonosByExp(Mono *list, unsigned count) {
+	qsort(list, count, sizeof(Mono), MonoExpCompareForQsort);
+}
+
+/**
+ * Ta funkcja ma sprowadzać wielomian do "standardowej" postaci.
+ * Funkcja modyfikuje wielomian w miejscu, ze względu na jej charakter
+ * jako funkcji która sprowadza wynik działania innej funkcji do unormowanej
+ * postaci przed returnem.
+ * @param[in] p : wielomian
+ */
+void SimplifyPoly(Poly *p) {
+	SortMonosByExp(p->monos, p->monos_count);
+
+	unsigned k = 0;
+
+	/* TODO: take care of monos with exp=0 e.g. y, yz, etc. */
+
+	for (unsigned i = 1; i < p->monos_count; i++) {
+		Mono mi = GetNthMono(p->monos, i);
+		Mono mp = GetNthMono(p->monos, k);
+
+		/* usuwanie jednomianów skalarnych */
+		if (mi.exp == 0 && PolyIsCoeff(&(mi.p))) {
+			p->scalar += mi.p.scalar;
+			continue;
+		}
+
+		/* po usunięciu skalara na to miejsce wchodzi następny jednomian */
+		if (mp.exp == 0 && PolyIsCoeff(&(mp.p))) {
+			InsertNthMono(p->monos, k, mi);
+			/**
+			 * nie zwiększamy indeksu k, w ten sposób przesunięte zostaną
+			 * wszystkie następne jednomiany (nie powstanie luka)
+			 */
+			continue;
+		}
+
+		/* łączymy jednomiany o tym samym wykładniku */
+		if (mi.exp == mp.exp) {
+			Poly np = PolyAdd(&mi.p, &mp.p);
+			PolyDestroy(&(mi.p));
+			PolyDestroy(&(mp.p));
+			Mono nm = MonoFromPoly(&np, mi.exp);
+			InsertNthMono(p->monos, k, nm);
+			/* znowu nie zwiększamy k → jw. */
+
+		/* jeżeli wszystko było w porządku to zostawiamy w spokoju */
+		} else {
+			k++;
+			InsertNthMono(p->monos, k, mi);
+		}
+	}
+	p->monos_count = k + 1;
 }
 
 
@@ -47,12 +146,11 @@ void PolyDestroy(Poly *p) {
 		return;
 	}
 
-	for (uint i = 0; i < p->monos_count; i++) {
+	for (unsigned i = 0; i < p->monos_count; i++) {
 		MonoDestroy(GetNthMonoPtr(p->monos, i));
 	}
 
 	free(p->monos);
-	p->monos = NULL;
 	p->monos_count = 0;
 }
 
@@ -62,14 +160,17 @@ void PolyDestroy(Poly *p) {
  * @return skopiowany wielomian
  */
 Poly PolyClone(const Poly *p){
-	Poly np;
-	np.scalar = p->scalar;
-	np.monos_count = p->monos_count;
-	np.monos = (Mono *) calloc(p->monos_count, sizeof(Mono));
-	for (uint i = 0; i < p->monos_count; i++) {
-		np.monos[i] = MonoClone(GetNthMonoPtr(p->monos, i));
+	Poly r;
+	r.scalar = p->scalar;
+	r.monos_count = p->monos_count;
+	r.monos = (Mono *) calloc(p->monos_count, sizeof(Mono));
+	assert(r.monos != NULL);
+
+	for (unsigned i = 0; i < p->monos_count; i++) {
+		r.monos[i] = MonoClone(GetNthMonoPtr(p->monos, i));
 	}
-	return np;
+
+	return r;
 }
 
 /**
@@ -79,20 +180,33 @@ Poly PolyClone(const Poly *p){
  * @return `p + q`
  */
 
-Poly PolyAdd(const Poly *p, const Poly *q) { // O(n)
+Poly PolyAdd(const Poly *p, const Poly *q) {
 	Poly r;
 	r.scalar = p->scalar + q->scalar;
 	r.monos_count = 0;
 	r.monos = (Mono *) calloc(p->monos_count + q->monos_count, sizeof(Mono));
-	// TODO realloc
+	assert(r.monos != NULL);
 
-	uint i = 0;
-	uint j = 0;
-
+	unsigned i = 0;
+	unsigned j = 0;
 	Mono *pm;
 	Mono *qm;
 
+	/**
+	 * Główna pętla zbierająca jednomiany do nowego wielomianu.
+	 *
+	 * Pętla będzie przechodzić oba wielomiany jednocześnie, zawsze dobierając
+	 * z każdego po jednomianie o najniższym wykładniku. Ten z tych jednomianów
+	 * który ma mniejszy wykładnik jest dołączany do sumy, i indeks na tablicy
+	 * na której się znajdował zwiększamy o 1. W ten sposób tworzony wielomian
+	 * będzie automatycznie posortowany.
+	 */
+
 	while (true) {
+		/**
+		 * Jeżeli wysycyliśmy którąś listę, to pozostałe jednomiany z drugiej
+		 * po prostu kopiujemy na koniec i wychodzimy z pętli.
+		 */
 		if (i == p->monos_count) {
 			for (; j < q->monos_count; j++) {
 				InsertNthMono(r.monos, r.monos_count,
@@ -100,6 +214,7 @@ Poly PolyAdd(const Poly *p, const Poly *q) { // O(n)
 				r.monos_count++;
 			}
 			break;
+
 		} else if (j == q->monos_count) {
 			for (; i < p->monos_count; i++) {
 				InsertNthMono(r.monos, r.monos_count,
@@ -107,34 +222,46 @@ Poly PolyAdd(const Poly *p, const Poly *q) { // O(n)
 				r.monos_count++;
 			}
 			break;
+
 		} else {
 
 			pm = GetNthMonoPtr(p->monos, i);
 			qm = GetNthMonoPtr(q->monos, j);
 
+			/**
+			 * Jeżeli dwa jednomiany mają ten sam wykładnik, to nie mogą trafić
+			 * osobno do sumy, ale ich współczynniki muszą być dodane do siebie
+			 */
 			if (pm->exp == qm->exp) {
 				Poly m_coeff = PolyAdd(&(pm->p), &(qm->p));
+
+				/**
+				 * Czasem może się zdarzyć, że suma współczynników = 0.
+				 * Wtedy powstaje jednomian zerowy który należy odrzucić
+				 */
 				if (!(PolyIsZero(&m_coeff))) {
 				InsertNthMono(r.monos, r.monos_count,
 							  MonoFromPoly(&m_coeff, pm->exp));
 				r.monos_count++;
 				}
+
 				i++;
 				j++;
+
+			/* Gdy wykładniki są różne, bierzemy jednomian z mniejszym. */
 			} else if (pm->exp > qm->exp) {
 				InsertNthMono(r.monos, r.monos_count, MonoClone(qm));
 				r.monos_count++;
 				j++;
+
 			} else /* pm->exp < pq->exp */ {
 				InsertNthMono(r.monos, r.monos_count, MonoClone(pm));
 				r.monos_count++;
 				i++;
 			}
 		}
-
-
 	}
-	//SortMonosByExp(r.monos_count, r.monos);
+
 	return r;
 }
 
@@ -146,38 +273,51 @@ Poly PolyAdd(const Poly *p, const Poly *q) { // O(n)
  * @return wielomian będący sumą jednomianów
  */
 Poly PolyAddMonos(unsigned count, const Mono *monos){
-	Poly p;
-	p.scalar = 0;
-	p.monos_count = 0;
-	p.monos = calloc(count, sizeof(Mono));
-	uint index = 0;
-	Mono *mptr;
-	for (uint i = 0; i < count; i++) {
+	/**
+	 * Uwaga. Przyjęto założenie, że jednomiany mają różne wykładniki. Jeżeli
+	 * będą dwa z takim samym, w większości przypadków operacje na wielomianach
+	 * będą działać normalnie, ale taka konstrukcja nie będzie działać np.
+	 * przy PolyIsEq. Założenie wynika z tego, ze w momencie pisania tego
+	 * komentarza jest juz sobota 13 maja.
+	 */
+
+	Poly r;
+	r.scalar = 0;
+	r.monos_count = 0;
+	r.monos = calloc(count, sizeof(Mono));
+	assert(r.monos != NULL);
+
+	unsigned k = 0;
+	Mono *mptr; // wskaźnik na aktualnie dodawany jednomian
+
+	for (unsigned i = 0; i < count; i++) {
 		mptr = GetNthMonoPtr(monos, i);
-		if (PolyIsZero(&(mptr->p))) {
-			continue;
-		}
+
+		/* Jednomiany–skalary nie mają prawa istnieć samodzielnie */
 		if (PolyIsCoeff(&(mptr->p)) && mptr->exp == 0) {
-			p.scalar += mptr->p.scalar;
+			r.scalar += mptr->p.scalar;
+
 		} else {
-			p.monos[index] = *mptr;
-			p.monos_count++;
-			index++;
+			r.monos[k] = *mptr;
+			r.monos_count++;
+			k++;
 		}
 	}
-	SortMonosByExp(p.monos_count, p.monos);
-	return p;
+
+	/* Lista wejściowa mogła być nieposortowana. Trzeba więc wynik posortować */
+	SortMonosByExp(r.monos, r.monos_count);
+	return r;
 }
 
-/**
- * Mnoży dwa wielomiany.
- * @param[in] p : wielomian
- * @param[in] q : wielomian
- * @return `p * q`
- */
 
 Mono MonoScalarMul(const Mono *m, poly_coeff_t scalar);
 
+/**
+ * Mnoży wielomian ze skalarem.
+ * @param[in] p : wielomian
+ * @param[in] scalar : skalar
+ * @return `p * scalar`
+ */
 Poly PolyScalarMul(const Poly *p, poly_coeff_t scalar) {
 	if (PolyIsCoeff(p)) {
 		return PolyFromCoeff(p->scalar * scalar);
@@ -187,13 +327,22 @@ Poly PolyScalarMul(const Poly *p, poly_coeff_t scalar) {
 	r.scalar = p->scalar * scalar;
 	r.monos_count = p->monos_count;
 	r.monos = (Mono *) calloc(r.monos_count, sizeof(Mono));
-	for (uint i = 0; i < p->monos_count; i++) {
+	assert(r.monos != NULL);
+
+	for (unsigned i = 0; i < p->monos_count; i++) {
 		InsertNthMono(r.monos, i,
 					  MonoScalarMul(GetNthMonoPtr(p->monos, i), scalar));
 	}
+
 	return r;
 }
 
+/**
+ * Mnoży jednomian przez skalar.
+ * @param[in] m : jednomian
+ * @param[in] scalar : skalar.
+ * @return `m * scalar`
+ */
 Mono MonoScalarMul(const Mono *m, poly_coeff_t scalar) {
 	Mono r;
 	r.exp = m->exp;
@@ -201,41 +350,14 @@ Mono MonoScalarMul(const Mono *m, poly_coeff_t scalar) {
 	return r;
 }
 
-
-void SimplifyPoly(Poly *p) { // I'M SURE that this shit IS gonna crash
-	SortMonosByExp(p->monos_count, p->monos);
-	uint index = 0;
-	/* TODO: take care of monos with exp=0 e.g. y, yz, 7x^0 etc. */
-	for (uint i = 1; i < p->monos_count; i++) {
-		Mono mi = GetNthMono(p->monos, i);
-		Mono mp = GetNthMono(p->monos, index);
-
-		if (mi.exp == 0 && PolyIsCoeff(&(mi.p))) {
-			p->scalar += mi.p.scalar;
-			continue;
-		}
-
-		if (mp.exp == 0 && PolyIsCoeff(&(mp.p))) {
-			InsertNthMono(p->monos, index, mi);
-			continue;
-		}
-
-		if (mi.exp == mp.exp) {
-			Poly np = PolyAdd(&mi.p, &mp.p);
-			PolyDestroy(&(mi.p));
-			PolyDestroy(&(mp.p));
-			Mono nm = MonoFromPoly(&np, mi.exp);
-			InsertNthMono(p->monos, index, nm);
-		} else {
-			index++;
-			InsertNthMono(p->monos, index, mi);
-		}
-	}
-	p->monos_count = index + 1;
-}
-
 Poly PolyMul(const Poly *p, const Poly *q);
 
+/**
+ * Mnoży jednomiany
+ * @param[in] m : jednomian
+ * @param[in] o : jednomian
+ * @return `m * o`
+ */
 Mono MonoMul(const Mono *m, const Mono *o) {
 	Mono r;
 	r.exp = m->exp + o->exp;
@@ -243,7 +365,14 @@ Mono MonoMul(const Mono *m, const Mono *o) {
 	return r;
 }
 
+/**
+ * Mnoży dwa wielomiany.
+ * @param[in] p : wielomian
+ * @param[in] q : wielomian
+ * @return `p * q`
+ */
 Poly PolyMul(const Poly *p, const Poly *q) {
+	/* przypadki trywialne */
 	if (PolyIsCoeff(p)) {
 		return PolyScalarMul(q, p->scalar);
 	}
@@ -251,37 +380,43 @@ Poly PolyMul(const Poly *p, const Poly *q) {
 		return PolyScalarMul(p, q->scalar);
 	}
 
+	/* mnożenie przez wyrazy wolne */
 	Poly r1 = PolyScalarMul(p, q->scalar);
 	Poly r2 = PolyScalarMul(q, p->scalar);
-
 	Poly r12 = PolyAdd(&r1, &r2);
+	PolyDestroy(&r1);
+	PolyDestroy(&r2);
 	r12.scalar = p->scalar * q->scalar;
 
+	/* mnożenie jednomianów */
 	Poly r3;
 	r3.scalar = 0;
 	r3.monos_count = p->monos_count * q->monos_count;
 	r3.monos = (Mono *) calloc(r3.monos_count, sizeof(Mono));
+	assert(r3.monos != NULL);
 
-	for (uint i = 0; i < p->monos_count; i++) {
-		for (uint j = 0; j < q->monos_count; j++) {
+	for (unsigned i = 0; i < p->monos_count; i++) {
+		for (unsigned j = 0; j < q->monos_count; j++) {
 			Mono *mp = GetNthMonoPtr(p->monos, i);
 			Mono *mq = GetNthMonoPtr(q->monos, j);
-			InsertNthMono(r3.monos, j + q->monos_count * i,
-						  MonoMul(mp, mq));
+			InsertNthMono(r3.monos, j + q->monos_count * i, MonoMul(mp, mq));
 		}
 	}
+	/* w mnożeniu nie zachowane były zasady tworzenia poprawnych wielomianów */
 	SimplifyPoly(&r3);
 
 	Poly r = PolyAdd(&r12, &r3);
-
-	PolyDestroy(&r1);
-	PolyDestroy(&r2);
 	PolyDestroy(&r12);
 	PolyDestroy(&r3);
 
 	return r;
 }
 
+/**
+ * Zwraca przeciwny jednomian.
+ * @param[in] p : jednomian
+ * @return `-p`
+ */
 Mono MonoNeg(const Mono *m) {
 	Mono r;
 	r.exp = m->exp;
@@ -303,7 +438,9 @@ Poly PolyNeg(const Poly *p) {
 	r.scalar = -(p->scalar);
 	r.monos_count = p->monos_count;
 	r.monos = (Mono *) calloc(r.monos_count, sizeof(Mono));
-	for (uint i = 0; i < p->monos_count; i++) {
+	assert(r.monos != NULL);
+
+	for (unsigned i = 0; i < p->monos_count; i++) {
 		InsertNthMono(r.monos, i, MonoNeg(GetNthMonoPtr(p->monos, i)));
 	}
 	return r;
@@ -334,6 +471,7 @@ Poly PolySub(const Poly *p, const Poly *q) {
  * @return stopień wielomianu @p p z względu na zmienną o indeksie @p var_idx
  */
 poly_exp_t PolyDegBy(const Poly *p, unsigned var_idx){
+	/* przypadki trywialne */
 	if (PolyIsZero(p)) {
 		return -1;
 	}
@@ -341,15 +479,23 @@ poly_exp_t PolyDegBy(const Poly *p, unsigned var_idx){
 		return 0;
 	}
 
+	/* gdy zmienną jest x0, zwracamy po prostu najwyższy wykładnik */
 	if (var_idx == 0) {
 		return GetNthMonoPtr(p->monos, p->monos_count - 1)->exp;
 	}
 
+	/* dla zmiennych wyższych, trzeba wejsc do każdego jednomianu z osobna */
+
 	poly_exp_t max_deg = 0;
 	poly_exp_t curr_deg = 0;
 
-	for (uint i = 0; i < p->monos_count; i++) {
+	for (unsigned i = 0; i < p->monos_count; i++) {
+		/* z perspektywy współczynnika szukamy zminnej o 1 mniejszym indeksie */
 		curr_deg = PolyDegBy(&(GetNthMonoPtr(p->monos, i)->p), var_idx - 1);
+		/**
+		 * nie wiemy w którym jednomianie znajdziemy najwyższą potęgę,
+		 * więc musimy szukać maximum "tradycyjnie"
+		 */
 		if (curr_deg > max_deg) {
 			max_deg = curr_deg;
 		}
@@ -364,6 +510,7 @@ poly_exp_t PolyDegBy(const Poly *p, unsigned var_idx){
  * @return stopień wielomianu @p p
  */
 poly_exp_t PolyDeg(const Poly *p) {
+	/* przypadki trywialne */
 	if (PolyIsZero(p)) {
 		return -1;
 	}
@@ -371,11 +518,12 @@ poly_exp_t PolyDeg(const Poly *p) {
 		return 0;
 	}
 
+	/* tak samo jak w PolyDegBy, tyle że sumujemy potęgi po drodze */
 	poly_exp_t max_deg = 0;
 	poly_exp_t curr_deg = 0;
 	Mono *m;
 
-	for (uint i = 0; i < p->monos_count; i++) {
+	for (unsigned i = 0; i < p->monos_count; i++) {
 		m = GetNthMonoPtr(p->monos, i);
 		curr_deg = PolyDeg(&(m->p)) + m->exp;
 		if (curr_deg > max_deg) {
@@ -389,6 +537,12 @@ poly_exp_t PolyDeg(const Poly *p) {
 
 bool PolyIsEq(const Poly *p, const Poly *q);
 
+/**
+ * Sprawdza równość dwóch jednomianów.
+ * @param[in] m : jednomian
+ * @param[in] o : jednomian
+ * @return `m = o`
+ */
 bool MonoIsEq(const Mono *m, const Mono *o) {
 	if (m->exp != o->exp) {
 		return false;
@@ -407,7 +561,7 @@ bool PolyIsEq(const Poly *p, const Poly *q) {
 		return false;
 	}
 
-	for (uint i = 0; i < p->monos_count; i++) {
+	for (unsigned i = 0; i < p->monos_count; i++) {
 		if (!MonoIsEq(GetNthMonoPtr(p->monos, i), GetNthMonoPtr(q->monos, i))) {
 			return false;
 		}
@@ -428,24 +582,28 @@ bool PolyIsEq(const Poly *p, const Poly *q) {
  * @return @f$p(x, x_0, x_1, \ldots)@f$
  */
 Poly PolyAt(const Poly *p, poly_coeff_t x) {
+	/* przypadek trywialny */
 	if (PolyIsCoeff(p)) {
 		return *p;
 	}
 
+	/**
+	 * będziemy szli po kolei po jednomianach i wyciągali ich wartość–wielomian
+	 * w danym punkcie x, i sumowali wynik
+	 */
 	Poly r = PolyFromCoeff(p->scalar);
-	Poly nr = r;
-	Poly q;
-	poly_coeff_t val;
-	poly_exp_t exponent;
+	Poly nr = r; // wielomian pomocniczy z wynikiem
+	Poly q; // wielomian dodawany do sumy wynikowej
+	poly_coeff_t val; // x^exponent
 
-	for (uint i = 0; i < p->monos_count; i++) {
-		exponent = p->monos[i].exp;
-		val = pow(x, exponent);
+	for (unsigned i = 0; i < p->monos_count; i++) {
+		val = pow(x, p->monos[i].exp);
 		q = PolyScalarMul(&(p->monos[i].p), val);
 		nr = PolyAdd(&r, &q);
 		PolyDestroy(&q);
 		PolyDestroy(&r);
 		r = nr;
 	}
+
 	return nr;
 }
