@@ -41,7 +41,7 @@ typedef struct Mono
 } Mono;
 
 /**
- * Tworzy wielomian, który jest współczynnikiem.
+ * Tworzy wielomian, który jest skalarem.
  * @param[in] c : wartość współczynnika
  * @return wielomian
  */

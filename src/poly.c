@@ -111,7 +111,7 @@ void SimplifyPoly(Poly *p) {
 		/* po usunięciu skalara na to miejsce wchodzi następny jednomian */
 		if (mp.exp == 0 && PolyIsCoeff(&(mp.p))) {
 			InsertNthMono(p->monos, k, mi);
-			/**
+			/*
 			 * nie zwiększamy indeksu k, w ten sposób przesunięte zostaną
 			 * wszystkie następne jednomiany (nie powstanie luka)
 			 */
@@ -192,7 +192,7 @@ Poly PolyAdd(const Poly *p, const Poly *q) {
 	Mono *pm;
 	Mono *qm;
 
-	/**
+	/*
 	 * Główna pętla zbierająca jednomiany do nowego wielomianu.
 	 *
 	 * Pętla będzie przechodzić oba wielomiany jednocześnie, zawsze dobierając
@@ -203,7 +203,7 @@ Poly PolyAdd(const Poly *p, const Poly *q) {
 	 */
 
 	while (true) {
-		/**
+		/*
 		 * Jeżeli wysycyliśmy którąś listę, to pozostałe jednomiany z drugiej
 		 * po prostu kopiujemy na koniec i wychodzimy z pętli.
 		 */
@@ -228,14 +228,14 @@ Poly PolyAdd(const Poly *p, const Poly *q) {
 			pm = GetNthMonoPtr(p->monos, i);
 			qm = GetNthMonoPtr(q->monos, j);
 
-			/**
+			/*
 			 * Jeżeli dwa jednomiany mają ten sam wykładnik, to nie mogą trafić
 			 * osobno do sumy, ale ich współczynniki muszą być dodane do siebie
 			 */
 			if (pm->exp == qm->exp) {
 				Poly m_coeff = PolyAdd(&(pm->p), &(qm->p));
 
-				/**
+				/*
 				 * Czasem może się zdarzyć, że suma współczynników = 0.
 				 * Wtedy powstaje jednomian zerowy który należy odrzucić
 				 */
@@ -587,7 +587,7 @@ Poly PolyAt(const Poly *p, poly_coeff_t x) {
 		return *p;
 	}
 
-	/**
+	/*
 	 * będziemy szli po kolei po jednomianach i wyciągali ich wartość–wielomian
 	 * w danym punkcie x, i sumowali wynik
 	 */
