@@ -87,11 +87,7 @@ void MemoryTest();
 
 void PrintHelp(char *);
 
-int main() {
-	maind();
-}
-
-int maind(int argc, char **argv)
+int main(int argc, char **argv)
 {
 	if (argc != 2)
 	{
@@ -223,7 +219,7 @@ int maind(int argc, char **argv)
 		res += SimpleIsEqTest();
 		res += SimpleAtTest();//
 		res += OverflowTest();
-		printf(" \n %d of 20 tests passed\n", res);
+		printf("%d of 20 tests passed\n", res);
 	}
 	else
 	{
@@ -905,7 +901,6 @@ bool AddTest1()
 				MakePoly((unsigned)local_max_exp, poly_coef_res_arr, exp_list);
 			if (!PolyIsEq(&p3, &p_expected_res))
 			{
-				assert (false);
 				fprintf(stderr, "[AddTest1] error for %lu %lu", current_max_exp,
 						local_max_exp);
 				good = false;
