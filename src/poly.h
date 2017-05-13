@@ -4,7 +4,7 @@
    @author Jakub Pawlewicz <pan@mimuw.edu.pl>
    @author Tomasz Necio <Tomasz.Necio@fuw.edu.pl>
    @copyright Uniwersytet Warszawski
-   @date 2017-04-24, TODO
+   @date 2017-04-24, 2017-05-13
 */
 
 #ifndef __POLY_H__
@@ -20,10 +20,7 @@ typedef long poly_coeff_t;
 /** Typ wykładników wielomianu */
 typedef int poly_exp_t;
 
-/**
- * Struktura przechowująca wielomian
- * TODO
- */
+/** Struktura przechowująca wielomian */
 typedef struct Poly
 {
 	poly_coeff_t scalar; ///< wyraz wolny wielomianu (skalar)
