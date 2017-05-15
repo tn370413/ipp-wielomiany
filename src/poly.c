@@ -151,6 +151,7 @@ void PolyDestroy(Poly *p) {
 	}
 
 	free(p->monos);
+	p->monos = NULL;
 	p->monos_count = 0;
 }
 
@@ -160,6 +161,9 @@ void PolyDestroy(Poly *p) {
  * @return skopiowany wielomian
  */
 Poly PolyClone(const Poly *p){
+	if (PolyIsCoeff(p)) {
+	    return *p;
+    }
 	Poly r;
 	r.scalar = p->scalar;
 	r.monos_count = p->monos_count;
@@ -201,7 +205,6 @@ Poly PolyAdd(const Poly *p, const Poly *q) {
 	 * na której się znajdował zwiększamy o 1. W ten sposób tworzony wielomian
 	 * będzie automatycznie posortowany.
 	 */
-
 	while (true) {
 		/*
 		 * Jeżeli wysycyliśmy którąś listę, to pozostałe jednomiany z drugiej
@@ -240,9 +243,9 @@ Poly PolyAdd(const Poly *p, const Poly *q) {
 				 * Wtedy powstaje jednomian zerowy który należy odrzucić
 				 */
 				if (!(PolyIsZero(&m_coeff))) {
-				InsertNthMono(r.monos, r.monos_count,
+				    InsertNthMono(r.monos, r.monos_count,
 							  MonoFromPoly(&m_coeff, pm->exp));
-				r.monos_count++;
+				    r.monos_count++;
 				}
 
 				i++;
@@ -261,6 +264,10 @@ Poly PolyAdd(const Poly *p, const Poly *q) {
 			}
 		}
 	}
+	
+	if (PolyIsCoeff(&r)) {
+	    free(r.monos);
+    }
 
 	return r;
 }
@@ -280,7 +287,6 @@ Poly PolyAddMonos(unsigned count, const Mono *monos){
 	 * przy PolyIsEq. Założenie wynika z tego, ze w momencie pisania tego
 	 * komentarza jest juz sobota 13 maja.
 	 */
-
 	Poly r;
 	r.scalar = 0;
 	r.monos_count = 0;
@@ -303,6 +309,11 @@ Poly PolyAddMonos(unsigned count, const Mono *monos){
 			k++;
 		}
 	}
+
+    if (PolyIsCoeff(&r)) {
+        free(r.monos);
+        return r;
+    }
 
 	/* Lista wejściowa mogła być nieposortowana. Trzeba więc wynik posortować */
 	SortMonosByExp(r.monos, r.monos_count);
