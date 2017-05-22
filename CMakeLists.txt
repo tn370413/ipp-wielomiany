@@ -23,13 +23,12 @@ set(CMAKE_C_FLAGS_DEBUG "-g")
 set(SOURCE_FILES
     src/poly.c
     src/poly.h
-    src/test_poly.c
 	src/main.c
 	src/stack.h
 )
 
 # Wskazujemy plik wykonywalny.
-add_executable(test_poly ${SOURCE_FILES})
+add_executable(calculator ${SOURCE_FILES})
 
 # Dodajemy obsługę Doxygena: sprawdzamy, czy jest zainstalowany i jeśli tak to:
 find_package(Doxygen)
