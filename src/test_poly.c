@@ -87,8 +87,50 @@ void MemoryTest();
 
 void PrintHelp(char *);
 
-int main(int argc, char **argv)
+#define C PolyFromCoeff
+
+
+Poly MakePolyHelper(int dummy, ...)
 {
+	va_list list;
+	va_start(list, dummy);
+	unsigned count = 0;
+	while (true)
+	{
+		va_arg(list, Poly);
+		if (va_arg(list, int) < 0)
+			break;
+		count++;
+	}
+	va_start(list, dummy);
+	Mono *arr = calloc(count, sizeof(Mono));
+	for (unsigned i = 0; i < count; ++i)
+	{
+		Poly p = va_arg(list, Poly);
+		arr[i] = MonoFromPoly(&p, va_arg(list, int));
+		assert(i == 0 || arr[i].exp > arr[i - 1].exp);
+	}
+	Poly closing_zero = va_arg(list, Poly);
+	va_end(list);
+	PolyDestroy(&closing_zero);
+	Poly res = PolyAddMonos(count, arr);
+	free(arr);
+	return res;
+}
+
+/**
+ * Pomocnicze makro do tworzenia wielomianów.
+ * P(@f$ c_0, e_0, c_1, e_1, \ldots @f$) tworzy wielomian
+ * @f$ c_0x^{e_0} + c_1x^{e_1} + \ldots @f$
+ */
+#define P(...) MakePolyHelper(0, __VA_ARGS__, PolyZero(), -1)
+
+
+int test_poly(int argc, char **argv)
+{
+
+	OverflowTest();
+
 	if (argc != 2)
 	{
 		PrintHelp(argv[0]);
@@ -103,9 +145,21 @@ int main(int argc, char **argv)
 	{
 		bool res = true;
 		res &= SimpleAddTest();
+		if (!SimpleAddTest()) {
+			fprintf(stderr, "SIMPLE ADD");
+		}
 		res &= SimpleMulTest();
+		if (!SimpleMulTest()) {
+			fprintf(stderr, "SIMPLE MUL");
+		}
 		res &= SimpleNegTest();
+		if (!SimpleNegTest()) {
+			fprintf(stderr, "SIMPLE ADDNEG");
+		}
 		res &= SimpleSubTest();
+		if (!SimpleSubTest()) {
+			fprintf(stderr, "SIMPLE SUB");
+		}
 		return !res;
 	}
 	else if (strcmp(argv[1], SIMPLE_ARITHMETIC2) == 0)
@@ -1309,43 +1363,6 @@ bool RarePolynomialTest()
 
 // Sekcja z testami tworzonymi ręcznie
 
-#define C PolyFromCoeff
-
-
-Poly MakePolyHelper(int dummy, ...)
-{
-	va_list list;
-	va_start(list, dummy);
-	unsigned count = 0;
-	while (true)
-	{
-		va_arg(list, Poly);
-		if (va_arg(list, int) < 0)
-			break;
-		count++;
-	}
-	va_start(list, dummy);
-	Mono *arr = calloc(count, sizeof(Mono));
-	for (unsigned i = 0; i < count; ++i)
-	{
-		Poly p = va_arg(list, Poly);
-		arr[i] = MonoFromPoly(&p, va_arg(list, int));
-		assert(i == 0 || arr[i].exp > arr[i - 1].exp);
-	}
-	Poly closing_zero = va_arg(list, Poly);
-	va_end(list);
-	PolyDestroy(&closing_zero);
-	Poly res = PolyAddMonos(count, arr);
-	free(arr);
-	return res;
-}
-
-/**
- * Pomocnicze makro do tworzenia wielomianów.
- * P(@f$ c_0, e_0, c_1, e_1, \ldots @f$) tworzy wielomian
- * @f$ c_0x^{e_0} + c_1x^{e_1} + \ldots @f$
- */
-#define P(...) MakePolyHelper(0, __VA_ARGS__, PolyZero(), -1)
 
 /**
  * Testuje czy Stopień wielomianu jest poprawnie liczony rekurencyjnie.
@@ -1438,23 +1455,38 @@ bool SimpleAddTest()
 			C(1),
 			C(2),
 			C(3));
+	if (!res) {
+		fprintf(stderr, "1");
+	}
 	res &= TestAdd(
 			P(C(1), 1),
 			C(2),
 			P(C(2), 0, C(1), 1));
+	if (!res) {
+		fprintf(stderr, "1");
+	}
 	res &= TestAdd(
 			C(1),
 			P(C(2), 2),
 			P(C(1), 0, C(2), 2));
+	if (!res) {
+		fprintf(stderr, "1");
+	}
 	res &= TestAdd(
 			P(C(1), 1),
 			P(C(2), 2),
 			P(C(1), 1, C(2), 2));
+	if (!res) {
+		fprintf(stderr, "1");
+	}
 	res &= TestAdd(
 			C(0),
 			P(C(1), 1),
 			P(C(1), 1));
 	// Upraszczanie się wielomianu
+	if (!res) {
+		fprintf(stderr, "1");
+	}
 	res &= TestAdd(
 			P(C(1), 1),
 			P(C(-1), 1),
@@ -1463,6 +1495,9 @@ bool SimpleAddTest()
 			P(C(1), 1, C(2), 2),
 			P(C(-1), 1),
 			P(C(2), 2));
+	if (!res) {
+		fprintf(stderr, "1a");
+	}
 	res &= TestAdd(
 			P(C(2), 0, C(1), 1),
 			P(C(-1), 1),
@@ -1472,10 +1507,13 @@ bool SimpleAddTest()
 			C(1),
 			P(C(-1), 0, C(1), 1),
 			P(C(1), 1));
-	res &= TestAdd(
-			C(1),
-			P(P(C(-1), 0, C(1), 1), 0),
-			P(P(C(1), 1), 0));
+	if (!res) {
+		fprintf(stderr, "1b");
+	}
+	res &= TestAdd(C(1),P(P(C(-1), 0, C(1), 1), 0),P(P(C(1), 1), 0));
+	if (!res) {
+		fprintf(stderr, "2");
+	}
 	res &= TestAdd(
 			C(1),
 			P(C(1), 0, C(2), 2),
@@ -1493,6 +1531,9 @@ bool SimpleAddTest()
 			P(P(C(1), 2), 0, P(C(2), 1), 1, C(1), 2),
 			P(P(C(1), 2), 0, P(C(-2), 1), 1, C(1), 2),
 			P(P(C(2), 2), 0, C(2), 2));
+	if (!res) {
+		fprintf(stderr, "3");
+	}
 	res &= TestAdd(
 			P(P(C(1), 2), 0, P(C(2), 1), 1, C(1), 2),
 			P(P(C(-1), 2), 0, P(C(1), 0, C(2), 1, C(1), 2), 1, C(-1), 2),
