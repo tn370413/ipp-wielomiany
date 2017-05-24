@@ -1,28 +1,28 @@
 #!/bin/bash
 
-if [ -n $3 ]; then
+if [ $# -gt 2 ]; then
     echo "TOO MANY PARAMETERS"
-    return 1
+    exit 1
 fi
 
-if [ -z $2 ]; then
+if [ $# -lt 2 ]; then
     echo "TOO FEW PARAMETERS"
-    return 1
+    exit 1
 fi
 
 if [ ! -x $1 ]; then
     echo "PROGRAM IS NOT AN EXECUTABLE"
-    return 1
+    exit 1
 fi
 
 if [ ! -d $2 ]; then
     echo "DATA DIRECTORY DOESN'T EXIST"
-    return 1
+    exit 1
 fi
 
 TEMPDIR=`mktemp -d`
 
-FILE=`grep -l "START" $2`
+FILE=`grep -xl -m 1 "START" $2/*`
 
 TEMPFILE="$TEMPDIR/temp"
 TEMPFILE2="$TEMPDIR/temp2"
@@ -32,9 +32,9 @@ tail -n +2 "$FILE" > "$TEMPFILE"
 
 LAST_LINE=`tail -1 $TEMPFILE`
 
-while [ $LAST_LINE != "STOP" ]; do
+while [ "$LAST_LINE" != "STOP" ]; do
     # last line wasn't stop, so we get the name of the next file from there
-    NEXTFILE=${LAST_LINE:5}
+    NEXTFILE="$2/${LAST_LINE:5}"
     
     # we remove 'FILE name'
     head -n -1 "$TEMPFILE" > "$TEMPFILE2"
@@ -48,10 +48,15 @@ while [ $LAST_LINE != "STOP" ]; do
     LAST_LINE=`tail -1 "$NEXTFILE"`
     cat "$TEMPFILE2" "$NEXTFILE" > "$TEMPFILE"
     rm "$TEMPFILE2"
+done
 
 # the last feeding
 # we remove 'STOP'
 head -n -1 "$TEMPFILE" > "$TEMPFILE2"
-eval "$1 < $TEMPFILE > $TEMPFILE2"
-tail -1 $TEMPFILE
-return 0
+eval "./$1 < $TEMPFILE2"
+
+rm "$TEMPFILE"
+rm "$TEMPFILE2"
+rmdir "$TEMPDIR"
+
+exit 0

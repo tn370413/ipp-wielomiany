@@ -402,6 +402,9 @@ Mono MonoMul(const Mono *m, const Mono *o) {
  */
 Poly PolyMul(const Poly *p, const Poly *q) {
 	/* przypadki trywialne */
+	if (PolyIsZero(p) || PolyIsZero(q)) {
+		return PolyZero();
+	}
 	if (PolyIsCoeff(p)) {
 		return PolyScalarMul(q, p->scalar);
 	}
