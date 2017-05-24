@@ -28,7 +28,7 @@ set(SOURCE_FILES
 )
 
 # Wskazujemy plik wykonywalny.
-add_executable(calculator ${SOURCE_FILES})
+add_executable(calc_poly ${SOURCE_FILES})
 
 # Dodajemy obsługę Doxygena: sprawdzamy, czy jest zainstalowany i jeśli tak to:
 find_package(Doxygen)
