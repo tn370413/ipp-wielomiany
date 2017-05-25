@@ -1,6 +1,7 @@
 #ifndef __STACK_H__
 #define __STACK_H__
 
+#include <assert.h>
 #include <stdlib.h>
 
 #include "poly.h"
@@ -18,6 +19,7 @@ static inline Stack StackEmpty() {
 	s.element_count = 0;
 	s.size = STACK_SIZE;
 	s.elements = calloc(STACK_SIZE, sizeof(Poly));
+	assert(s.elements != NULL);
 	return s;
 }
 
@@ -33,6 +35,7 @@ static inline void StackDestroy(Stack *s) {
 static inline void GrowStack(Stack *s) {
 	s->size *= 2;
 	s->elements = (Poly *) realloc(s->elements, s->size * sizeof(Poly));
+	assert(s->elements != NULL);
 }
 
 static inline void Push(Stack *s, Poly *p) {

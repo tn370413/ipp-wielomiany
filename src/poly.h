@@ -13,12 +13,15 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdlib.h>
+#include <stdint.h>
 
 /** Typ współczynników wielomianu */
-typedef long poly_coeff_t;
+typedef int64_t poly_coeff_t;
+#define POLY_COEFF_MAX INT64_MAX
 
 /** Typ wykładników wielomianu */
-typedef int poly_exp_t;
+typedef int32_t poly_exp_t;
+#define POLY_EXP_MAX INT32_MAX
 
 /** Struktura przechowująca wielomian */
 typedef struct Poly

@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdbool.h>
@@ -7,7 +8,11 @@
 #include "stack.h"
 
 #define INITIAL_MONOS_SIZE 200
-#define MAX_COMMAND_LENGTH 30
+#define MAX_COMMAND_LENGTH 24
+
+#define POLY_EXP_T 1
+#define POLY_COEFF_T 2
+#define UNSIGNED 3
 
 #define UNDERFLOW_ERR_MSG "ERROR %d STACK UNDERFLOW\n"
 #define PARSING_ERR_MSG "ERROR %d %d\n"
@@ -16,14 +21,61 @@
 #define WRONG_VARIABLE_ERR_MSG "ERROR %d WRONG VARIABLE\n"
 
 #define EOF_FLAG 1
+#define UNDERFLOW_ERR_FLAG 2
+#define PARSING_ERR_FLAG 3
+#define WRONG_COMMAND_ERR_FLAG 4
+#define WRONG_VALUE_ERR_FLAG 5
+#define WRONG_VARIABLE_ERR_FLAG 6
 
+
+/* * * PARSER STATE * * */
+
+/* These variables will hold the state of the whole parser */
+unsigned row = 0;
+unsigned column = 0;
+int error_flag = 0;
+
+/* Dummy structs for quick escape from functions on error */
+Poly DUMMY_POLY;
+Mono DUMMY_MONO;
+
+void ErrorSetFlag(int flag) {
+	error_flag = flag;
+}
+
+int Error() {
+	return error_flag;
+}
+
+void ErrorPrint(char* msg) {
+	fprintf(stderr, msg, row, column);
+}
+
+void ErrorHandle() {
+	switch (error_flag) {
+	case UNDERFLOW_ERR_FLAG:
+		ErrorPrint(UNDERFLOW_ERR_MSG);
+		break;
+	case PARSING_ERR_FLAG:
+		ErrorPrint(PARSING_ERR_MSG);
+		break;
+	case WRONG_COMMAND_ERR_FLAG:
+		ErrorPrint(WRONG_COMMAND_ERR_MSG);
+		break;
+	case WRONG_VALUE_ERR_FLAG:
+		ErrorPrint(WRONG_VALUE_ERR_MSG);
+		break;
+	case WRONG_VARIABLE_ERR_FLAG:
+		ErrorPrint(WRONG_VARIABLE_ERR_MSG);
+		break;
+	default:
+		break;
+	}
+
+	error_flag = 0;
+}
 
 /* * * OUTPUT FUNCTIONS * * */
-
-
-void PrintError(char* msg, unsigned row, int column) {
-	fprintf(stderr, msg, row + 1, column + 1);
-}
 
 void BoolPrint(bool val) {
 	if (val) {
@@ -54,13 +106,14 @@ Poly PolyPrepareForPrint(Poly *p, bool *memory_flag) {
 }
 
 void PolyPrint(Poly *p) {
-	bool was_memory_allocated = false;
-	Poly q = PolyPrepareForPrint(p, &was_memory_allocated);
-	if (PolyIsCoeff(&q)) {
-		printf("%ld", q.scalar);
+	if (PolyIsCoeff(p)) { // check this code if bugs happen
+		printf("%ld", p->scalar);
 	} else {
+		bool was_memory_allocated = false;
+		Poly q = PolyPrepareForPrint(p, &was_memory_allocated);
+
 		if (q.scalar != 0) {
-			printf("(%d,0)", q.scalar);
+			printf("(%ld,0)", q.scalar);
 		}
 		for (unsigned i = 0; i < q.monos_count; i++) {
 			if (i > 0 || q.scalar != 0) {
@@ -68,9 +121,10 @@ void PolyPrint(Poly *p) {
 			}
 			MonoPrint(&(q.monos[i]));
 		}
-	}
-	if (was_memory_allocated) {
-		PolyDestroy(&q);
+
+		if (was_memory_allocated) {
+			PolyDestroy(&q);
+		}
 	}
 }
 
@@ -85,77 +139,135 @@ int SeeChar() {
 }
 
 
-int GetChar(int *num) {
-	(*num)++;
+int GetChar() {
+	column++;
 	return getchar();
+}
+
+void UnGetChar(int ch) {
+	column--;
+	ungetc(ch, stdin);
 }
 
 bool IsLetter(int ch) {
 	return ('a' <= ch && ch <= 'z') || ('A' <= ch && ch <= 'Z');
 }
 
-bool IsDigit(int ch) {
-	return ('0' <= ch && ch <= '9') || (ch == '-');
+bool IsDigit(int ch, bool exclude_minus) {
+	return ('0' <= ch && ch <= '9') || (!exclude_minus && (ch == '-'));
 }
 
-void GoToNextLine(int *error) {
+void GoToNextLine() {
 	int ch = SeeChar();
 	while (ch == '\n' || ch == '\r') {
 		getchar();
 		ch = SeeChar();
 		if (ch == EOF) {
-			*error = EOF_FLAG;
+			ErrorSetFlag(EOF_FLAG);
 			return;
 		}
 	}
 }
 
-void DebugPrint(int c, char *place) {
-	fprintf(stderr, "%s ", place);
-	fprintf(stderr, &c);
-	fprintf(stderr, "\n");
-	fflush(stderr);
+Poly PolyParse();
+
+void ValidateNextDigit(long r, int digit, long max_val) {
+	if (r > max_val / 10 ||
+			(r == max_val / 10 && digit > max_val % 10)) {
+		ErrorSetFlag(PARSING_ERR_FLAG);
+	}
 }
 
-Poly PolyParse(int *column, unsigned row);
-
-Mono MonoParse(int *column, unsigned row) {
-	GetChar(column); // (
-	Poly p = PolyParse(column, row);
-	//if ((c = GetChar(column)) != ',') {
-	//	printf(&c);
-//		PrintError(PARSING_ERR, row, (*pos) - in);
-	//}
-	GetChar(column); // ,
-	char number[10];
-	int ch = SeeChar();
-	unsigned i = 0;
-	if (!IsDigit(ch)) {
-		fprintf(stderr, "ERROR1 ");
-		return;
+long NumberParse(int type) {
+	if (!IsDigit(SeeChar(), false)) {
+		GetChar();
+		ErrorSetFlag(PARSING_ERR_FLAG);
+		return 0;
 	}
-	while (true) {
-		ch = SeeChar();
-		if ('0' <= ch && ch <= '9') {
-			number[i] = GetChar(column);
-		} else {
+
+	bool minus = false;
+	if (SeeChar() == '-') {
+		if (type == POLY_EXP_T || type == UNSIGNED) {
+			ErrorSetFlag(PARSING_ERR_FLAG);
+			return 0;
+		}
+		minus = true;
+		GetChar();
+	}
+
+	int ch;
+	int digit;
+	unsigned i = 0;
+	long r = 0;
+	while (IsDigit(ch = GetChar(), true)) {
+		digit = ch - 48;
+
+		switch (type) {
+		case POLY_EXP_T:
+			ValidateNextDigit(r, digit, POLY_EXP_MAX);
+			break;
+		case POLY_COEFF_T:
+			ValidateNextDigit(r, digit, POLY_COEFF_MAX);
+			break;
+		case UNSIGNED:
+			ValidateNextDigit(r, digit, UINT32_MAX);
+			break;
+		default:
+			assert(false);
 			break;
 		}
+		if (Error()) {
+			return 0;
+		}
+
+		r = 10 * r + digit;
 		i++;
 	}
-	number[i] = 0;
-	if (GetChar(column) != ')') {
-//		PrintError(PARSING_ERR, row, (*pos) - in);
+	UnGetChar(ch);
+
+	if (minus) {
+		return -r;
 	}
-	poly_exp_t e = strtol(number, NULL, 10);
+	return r;
+}
+
+Mono MonoParse() {
+	if (GetChar() != '(') {
+		ErrorSetFlag(PARSING_ERR_FLAG);
+		return DUMMY_MONO;
+	}
+
+	Poly p = PolyParse();
+	if (Error()) { return DUMMY_MONO; }
+
+	if (GetChar() != ',') {
+		ErrorSetFlag(PARSING_ERR_FLAG);
+		return DUMMY_MONO;
+	}
+
+	int ch = SeeChar();
+	if (!IsDigit(ch, false)) {
+		GetChar();
+		ErrorSetFlag(PARSING_ERR_FLAG);
+		return DUMMY_MONO;
+	}
+
+	poly_exp_t e = NumberParse(POLY_EXP_T);
+	if (Error()) { return DUMMY_MONO; }
+
+	if (GetChar() != ')') {
+		ErrorSetFlag(PARSING_ERR_FLAG);
+		return DUMMY_MONO;
+	}
+
 	return MonoFromPoly(&p, e);
 }
 
-Poly PolyParse(int *column, unsigned row) {
-	if (SeeChar() == '(') {
-		/* array of monos */
+Poly PolyParse() {
+	if (SeeChar() == '(') { /* array of monos */
 		size_t monos_size = INITIAL_MONOS_SIZE;
 		Mono *monos = calloc(monos_size, sizeof(Mono));
+		assert(monos != NULL);
 		unsigned monos_count = 0;
 
 		int c;
@@ -163,13 +275,20 @@ Poly PolyParse(int *column, unsigned row) {
 			if (monos_count == monos_size) {
 				monos_size *= 2;
 				monos = realloc(monos, monos_size * sizeof(Mono));
+				assert(monos != NULL);
 			}
-			monos[monos_count] = MonoParse(column, row);
+
+			monos[monos_count] = MonoParse();
+			if (Error()) {
+				free(monos);
+				return DUMMY_POLY;
+			}
+
 			monos_count++;
 			if ((c = SeeChar()) != '+') {
-				break;
+				break; // we use SeeChar coz we dont know if its the end or ','
 			} else {
-				GetChar(column); // +
+				GetChar(); // +
 			}
 		}
 
@@ -178,26 +297,8 @@ Poly PolyParse(int *column, unsigned row) {
 		return p;
 
 	} else /* a scalar */ {
-		// CODE TO GET A NUMBER
-		char number[10];
-		int ch;
-		unsigned i = 0;
-		ch = SeeChar();
-		if (!IsDigit(ch)) {
-			fprintf(stderr, "ERROR2");
-			return PolyZero();
-		}
-		while (true) {
-			ch = SeeChar();
-			if (IsDigit(ch)) {
-				number[i] = getchar();
-			} else {
-				break;
-			}
-			i++;
-		}
-		number[i] = 0;
-		poly_coeff_t r = strtol(number, NULL, 10);
+		poly_coeff_t r = NumberParse(POLY_COEFF_T);
+		if (Error()) { return DUMMY_POLY; }
 		return PolyFromCoeff(r);
 	}
 }
@@ -205,20 +306,29 @@ Poly PolyParse(int *column, unsigned row) {
 
 /* * * POLY OPERATIONS * * */
 
+Poly GetTopSafely(Stack *s) {
+	if (IsEmpty(s)) {
+		ErrorSetFlag(UNDERFLOW_ERR_FLAG);
+		return DUMMY_POLY;
+	}
+	return GetTop(s);
+}
 
-void ActOnTwoPolysOnStack(Stack *s, unsigned row,
+Poly PopSafely(Stack *s) {
+	if (IsEmpty(s)) {
+		ErrorSetFlag(UNDERFLOW_ERR_FLAG);
+		return DUMMY_POLY;
+	}
+	return Pop(s);
+}
+
+void ActOnTwoPolysOnStack(Stack *s,
 						  Poly (*op)(const Poly *, const Poly *)) {
-	if (IsEmpty(s)) {
-		PrintError(UNDERFLOW_ERR_MSG, row, 0);
-		return;
-	}
-	Poly p = Pop(s);
+	Poly p = PopSafely(s);
+	if (Error()) { return; }
 
-	if (IsEmpty(s)) {
-		PrintError(UNDERFLOW_ERR_MSG, row, 0);
-		return;
-	}
-	Poly q = Pop(s);
+	Poly q = PopSafely(s);
+	if (Error()) { return; }
 
 	Poly r = op(&p, &q);
 	PolyDestroy(&p);
@@ -227,77 +337,211 @@ void ActOnTwoPolysOnStack(Stack *s, unsigned row,
 	Push(s, &r);
 }
 
-void AddTwoPolysFromStack(Stack *s, unsigned row) {
-	return ActOnTwoPolysOnStack(s, row, PolyAdd);
+void AddTwoPolysFromStack(Stack *s) {
+	return ActOnTwoPolysOnStack(s, PolyAdd);
 }
 
-void MultiplyTwoPolysFromStack(Stack *s, unsigned row) {
-	return ActOnTwoPolysOnStack(s, row, PolyMul);
+void MultiplyTwoPolysFromStack(Stack *s) {
+	return ActOnTwoPolysOnStack(s, PolyMul);
 }
 
-void SubtractTwoPolysFromStack(Stack *s, unsigned row) {
-	return ActOnTwoPolysOnStack(s, row, PolySub);
+void SubtractTwoPolysFromStack(Stack *s) {
+	return ActOnTwoPolysOnStack(s, PolySub);
 }
 
-bool AreEqualTwoPolysFromStack(Stack *s) {
-	Poly p = Pop(s);
-	Poly q = GetTop(s);
+void PrintAreEqualTwoPolysFromStack(Stack *s) {
+	Poly p = PopSafely(s);
+	if (Error()) { return; }
+
+	Poly q = GetTopSafely(s);
+	if (Error()) {
+		Push(s, &p);
+		return;
+	}
+
 	bool r = PolyIsEq(&p, &q);
 	Push(s, &p);
+	BoolPrint(r);
+}
+
+void IsCoeffPolyOnStack(Stack *s) {
+	Poly top = GetTopSafely(s);
+	if (Error()) { return; }
+
+	BoolPrint(PolyIsCoeff(&top));
+}
+
+void IsZeroPolyOnStack(Stack *s) {
+	Poly top = GetTopSafely(s);
+	if (Error()) { return; }
+
+	BoolPrint(PolyIsZero(&top));
+}
+
+void ClonePolyOnStack(Stack *s) {
+	Poly top = GetTopSafely(s);
+	if (Error()) { return; }
+
+	Poly p = PolyClone(&top);
+	Push(s, &p);
+}
+
+void NegatePolyOnStack(Stack *s) {
+	Poly p = PopSafely(s);
+	if (Error()) { return; }
+
+	Poly q = PolyNeg(&p);
+	PolyDestroy(&p);
+	Push(s, &q);
+}
+
+void PrintDegreePolyOnStack(Stack *s) {
+	Poly top = GetTopSafely(s);
+	if (Error()) { return; }
+
+	printf("%d\n", PolyDeg(&top));
+}
+
+void PrintPolyOnStack(Stack *s) {
+	Poly top = GetTopSafely(s);
+	if (Error()) { return; }
+
+	PolyPrint(&top);
+	printf("\n");
+}
+
+long StringToLong(char *c, int type) {
+	if (!IsDigit(c[0], false)) {
+		ErrorSetFlag(PARSING_ERR_FLAG);
+		return 0;
+	}
+
+	bool minus = false;
+	if (c[0] == '-') {
+		if (type == POLY_EXP_T || type == UNSIGNED) {
+			ErrorSetFlag(PARSING_ERR_FLAG);
+			return 0;
+		}
+		minus = true;
+		c++;
+	}
+
+	int ch;
+	int digit;
+	unsigned i = 0;
+	long r = 0;
+	while (IsDigit(ch = c[i], true)) {
+		digit = ch - 48;
+
+		switch (type) {
+		case POLY_EXP_T:
+			ValidateNextDigit(r, digit, POLY_EXP_MAX);
+			break;
+		case POLY_COEFF_T:
+			ValidateNextDigit(r, digit, POLY_COEFF_MAX);
+			break;
+		case UNSIGNED:
+			ValidateNextDigit(r, digit, UINT32_MAX);
+			break;
+		default:
+			assert(false);
+			break;
+		}
+		if (Error()) {
+			return 0;
+		}
+
+		r = 10 * r + digit;
+		i++;
+	}
+
+	if (minus) {
+		return -r;
+	}
 	return r;
 }
 
+void PrintDegBy(Stack *s, char *command) {
+	Poly top = GetTopSafely(s);
+	if (Error()) { return; }
+
+	unsigned arg = StringToLong(command + 7, UNSIGNED);
+	if (Error()) {
+		ErrorSetFlag(WRONG_VARIABLE_ERR_FLAG);
+		return;
+	}
+
+	int r = PolyDegBy(&top, arg);
+	printf("%d\n", r);
+}
+
+void CalculatePolyAt(Stack *s, char *command) {
+	Poly top = PopSafely(s);
+	if (Error()) {
+		return;
+	}
+	poly_coeff_t arg = StringToLong(command + 3, POLY_COEFF_T);
+	if (Error()) {
+		ErrorSetFlag(WRONG_VALUE_ERR_FLAG);
+		return;
+	}
+
+	Poly p = PolyAt(&top, arg);
+	PolyDestroy(&top);
+	Push(s, &p);
+}
 
 /* * * THE PROGRAM * * */
 
 
-void ExecuteCommand(Stack *s, char *command, unsigned row) {
+void ExecuteCommand(Stack *s, char *command) {
 	if (strcmp(command, "ZERO") == 0) {
 		Poly p = PolyZero();
 		Push(s, &p);
+
 	} else if (strcmp(command, "IS_COEFF") == 0) {
-		Poly top = GetTop(s);
-		BoolPrint(PolyIsCoeff(&top));
+		IsCoeffPolyOnStack(s);
+
 	} else if (strcmp(command, "IS_ZERO") == 0) {
-		Poly top = GetTop(s);
-		BoolPrint(PolyIsZero(&top));
+		IsZeroPolyOnStack(s);
+
 	} else if (strcmp(command, "CLONE") == 0) {
-		Poly top = GetTop(s);
-		Poly p = PolyClone(&top);
-		Push(s, &p);
+		ClonePolyOnStack(s);
+
 	} else if (strcmp(command, "ADD") == 0) {
-		AddTwoPolysFromStack(s, row);
+		AddTwoPolysFromStack(s);
+
 	} else if (strcmp(command, "MUL") == 0) {
-		MultiplyTwoPolysFromStack(s, row);
+		MultiplyTwoPolysFromStack(s);
+
 	} else if (strcmp(command, "NEG") == 0) {
-		Poly p = Pop(s);
-		Poly q = PolyNeg(&p);
-		PolyDestroy(&p);
-		Push(s, &q);
+		NegatePolyOnStack(s);
+
 	} else if (strcmp(command, "SUB") == 0) {
-		SubtractTwoPolysFromStack(s, row);
+		SubtractTwoPolysFromStack(s);
+
 	} else if (strcmp(command, "IS_EQ") == 0) {
-		BoolPrint(AreEqualTwoPolysFromStack(s));
+		PrintAreEqualTwoPolysFromStack(s);
+
 	} else if (strcmp(command, "DEG") == 0) {
-		Poly top = GetTop(s);
-		printf("%d\n", PolyDeg(&top));
+		PrintDegreePolyOnStack(s);
+
 	} else if (strcmp(command, "PRINT") == 0) {
-		Poly top = GetTop(s);
-		PolyPrint(&top);
-		printf("\n");
+		PrintPolyOnStack(s);
+
 	} else if (strcmp(command, "POP") == 0) {
-		Poly p = Pop(s);
+		Poly p = PopSafely(s);
+		if (Error()) { return; }
 		PolyDestroy(&p);
-	} else if (strncmp(command, "DEG_BY ", 7) == 0) { // TODO ERROR MSGS
-		Poly top = GetTop(s);
-		printf("%d\n", PolyDegBy(&top, strtol(command + 7, NULL, 10)));
-	} else if (strncmp(command, "AT ", 3) == 0) { // TODO ERROR MSGS
-		Poly top = Pop(s);
-		Poly p = PolyAt(&top, strtol(command + 3, NULL, 10));
-		PolyDestroy(&top);
-		Push(s, &p);
+
+	} else if (strncmp(command, "DEG_BY ", 7) == 0) {
+		PrintDegBy(s, command);
+
+	} else if (strncmp(command, "AT ", 3) == 0) {
+		CalculatePolyAt(s, command);
+
 	} else {
-		PrintError(WRONG_COMMAND_ERR_MSG, row, 0);
+		ErrorSetFlag(WRONG_COMMAND_ERR_FLAG);
 	}
 }
 
@@ -306,8 +550,6 @@ int main() {
 
 	char command_buf[MAX_COMMAND_LENGTH];
 	int ch;
-	unsigned row = 0;
-	int error = 0;
 
 	while (true) {
 		ch = SeeChar();
@@ -316,18 +558,21 @@ int main() {
 		} else if (IsLetter(ch)) {
 			fgets(command_buf, sizeof command_buf, stdin);
 			command_buf[strcspn(command_buf, "\r\n")] = 0;
-			ExecuteCommand(&s, command_buf, row);
+			ExecuteCommand(&s, command_buf);
 		} else {
-			int j = 0;
-			Poly p = PolyParse(&j, row);
-			Push(&s, &p);
-			GoToNextLine(&error);
-			if (error == EOF_FLAG) {
-				break;
+			Poly p = PolyParse();
+			if (!(Error())) {
+				Push(&s, &p);
+				GoToNextLine();
+				if (Error() == EOF_FLAG) {
+					break;
+				}
 			}
 		}
+		ErrorHandle();
 
 		row++;
+		column = 0;
 	}
 
 	StackDestroy(&s);
