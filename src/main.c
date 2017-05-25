@@ -27,6 +27,12 @@
 #define WRONG_VALUE_ERR_FLAG 5
 #define WRONG_VARIABLE_ERR_FLAG 6
 
+/* Ideas on how to get cleaner code:
+ * 1. join common parts of NumberParser and StringToLong
+ * 2. have a common way of checking if the next characer \in allowed characters
+ *    if last_character != '\n'
+ */
+
 
 /* * * PARSER STATE * * */
 
@@ -34,6 +40,7 @@
 unsigned row = 0;
 unsigned column = 0;
 int error_flag = 0;
+char last_character;
 
 /* Dummy structs for quick escape from functions on error */
 Poly DUMMY_POLY;
@@ -48,7 +55,7 @@ int Error() {
 }
 
 void ErrorPrint(char* msg) {
-	fprintf(stderr, msg, row, column);
+	fprintf(stderr, msg, row + 1, column);
 }
 
 void ErrorHandle() {
@@ -71,7 +78,6 @@ void ErrorHandle() {
 	default:
 		break;
 	}
-
 	error_flag = 0;
 }
 
@@ -141,7 +147,8 @@ int SeeChar() {
 
 int GetChar() {
 	column++;
-	return getchar();
+	last_character = getchar();
+	return last_character;
 }
 
 void UnGetChar(int ch) {
@@ -157,15 +164,31 @@ bool IsDigit(int ch, bool exclude_minus) {
 	return ('0' <= ch && ch <= '9') || (!exclude_minus && (ch == '-'));
 }
 
-void GoToNextLine() {
+void GoToNextLine(bool *eof_flag) {
+	if (last_character == '\n') {
+		getchar();
+		return;
+	}
+
 	int ch = SeeChar();
-	while (ch == '\n' || ch == '\r') {
+
+	if (!Error() && ch != '\n') {
+		column++;
+		ErrorSetFlag(PARSING_ERR_FLAG);
+	}
+
+	while (Error() && ch != '\n') {
 		getchar();
 		ch = SeeChar();
 		if (ch == EOF) {
-			ErrorSetFlag(EOF_FLAG);
+			*eof_flag = EOF_FLAG;
 			return;
 		}
+	}
+
+	ch = getchar(); // should be '\n'
+	if (ch == EOF) {
+		*eof_flag = true;
 	}
 }
 
@@ -286,7 +309,7 @@ Poly PolyParse() {
 
 			monos_count++;
 			if ((c = SeeChar()) != '+') {
-				break; // we use SeeChar coz we dont know if its the end or ','
+				break;
 			} else {
 				GetChar(); // +
 			}
@@ -328,7 +351,10 @@ void ActOnTwoPolysOnStack(Stack *s,
 	if (Error()) { return; }
 
 	Poly q = PopSafely(s);
-	if (Error()) { return; }
+	if (Error()) {
+		Push(s, &p);
+		return;
+	}
 
 	Poly r = op(&p, &q);
 	PolyDestroy(&p);
@@ -455,6 +481,11 @@ long StringToLong(char *c, int type) {
 		i++;
 	}
 
+	if (ch != '\0') {
+		ErrorSetFlag(PARSING_ERR_FLAG);
+		return 0;
+	}
+
 	if (minus) {
 		return -r;
 	}
@@ -462,29 +493,28 @@ long StringToLong(char *c, int type) {
 }
 
 void PrintDegBy(Stack *s, char *command) {
-	Poly top = GetTopSafely(s);
-	if (Error()) { return; }
-
 	unsigned arg = StringToLong(command + 7, UNSIGNED);
 	if (Error()) {
 		ErrorSetFlag(WRONG_VARIABLE_ERR_FLAG);
 		return;
 	}
 
+	Poly top = GetTopSafely(s);
+	if (Error()) { return; }
+
 	int r = PolyDegBy(&top, arg);
 	printf("%d\n", r);
 }
 
 void CalculatePolyAt(Stack *s, char *command) {
-	Poly top = PopSafely(s);
-	if (Error()) {
-		return;
-	}
 	poly_coeff_t arg = StringToLong(command + 3, POLY_COEFF_T);
 	if (Error()) {
 		ErrorSetFlag(WRONG_VALUE_ERR_FLAG);
 		return;
 	}
+
+	Poly top = PopSafely(s);
+	if (Error()) { return; }
 
 	Poly p = PolyAt(&top, arg);
 	PolyDestroy(&top);
@@ -548,10 +578,12 @@ void ExecuteCommand(Stack *s, char *command) {
 int main() {
 	Stack s = StackEmpty();
 
-	char command_buf[MAX_COMMAND_LENGTH];
+	char command_buf[MAX_COMMAND_LENGTH] = {'\0'};
 	int ch;
+	bool eof_flag = false;
 
-	while (true) {
+	while (!eof_flag) {
+		column = 0;
 		ch = SeeChar();
 		if (ch == EOF) {
 			break;
@@ -559,20 +591,17 @@ int main() {
 			fgets(command_buf, sizeof command_buf, stdin);
 			command_buf[strcspn(command_buf, "\r\n")] = 0;
 			ExecuteCommand(&s, command_buf);
+			ErrorHandle();
 		} else {
 			Poly p = PolyParse();
+			GoToNextLine(&eof_flag);
 			if (!(Error())) {
 				Push(&s, &p);
-				GoToNextLine();
-				if (Error() == EOF_FLAG) {
-					break;
-				}
+			} else {
+				ErrorHandle();
 			}
 		}
-		ErrorHandle();
-
 		row++;
-		column = 0;
 	}
 
 	StackDestroy(&s);
