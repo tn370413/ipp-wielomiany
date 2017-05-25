@@ -5,7 +5,7 @@
 
 #include "poly.h"
 
-#define STACK_SIZE 1000
+#define STACK_SIZE 100000
 
 typedef struct Stack {
 	size_t element_count;
@@ -22,6 +22,9 @@ static inline Stack StackEmpty() {
 }
 
 static inline void StackDestroy(Stack *s) {
+	for (unsigned i = 0; i < s->element_count; i++) {
+		PolyDestroy(&(s->elements[i]));
+	}
 	free(s->elements);
 	s->element_count = 0;
 	s->size = 0;

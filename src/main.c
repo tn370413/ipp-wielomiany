@@ -41,19 +41,36 @@ void MonoPrint(Mono *m) {
 	printf(",%d)", m->exp);
 }
 
+// move to poly.h
+Poly PolyPrepareForPrint(Poly *p, bool *memory_flag) {
+	if (p->scalar != 0 && p->monos_count > 1 && p->monos[0].exp == 0) {
+		Poly r = PolyClone(p);
+		r.scalar = 0;
+		r.monos[0].p.scalar += p->scalar;
+		*memory_flag = true;
+		return r;
+	}
+	return *p;
+}
+
 void PolyPrint(Poly *p) {
-	if (PolyIsCoeff(p)) {
-		printf("%d", (int) p->scalar);
+	bool was_memory_allocated = false;
+	Poly q = PolyPrepareForPrint(p, &was_memory_allocated);
+	if (PolyIsCoeff(&q)) {
+		printf("%ld", q.scalar);
 	} else {
-		if (p->scalar != 0) {
-			printf("(%d,0)", (int) p->scalar);
+		if (q.scalar != 0) {
+			printf("(%d,0)", q.scalar);
 		}
-		for (unsigned i = 0; i < p->monos_count; i++) {
-			if (i > 0 || p->scalar != 0) {
+		for (unsigned i = 0; i < q.monos_count; i++) {
+			if (i > 0 || q.scalar != 0) {
 				printf("+");
 			}
-			MonoPrint(&(p->monos[i]));
+			MonoPrint(&(q.monos[i]));
 		}
+	}
+	if (was_memory_allocated) {
+		PolyDestroy(&q);
 	}
 }
 
@@ -206,6 +223,7 @@ void ActOnTwoPolysOnStack(Stack *s, unsigned row,
 	Poly r = op(&p, &q);
 	PolyDestroy(&p);
 	PolyDestroy(&q);
+
 	Push(s, &r);
 }
 
@@ -274,9 +292,10 @@ void ExecuteCommand(Stack *s, char *command, unsigned row) {
 		Poly top = GetTop(s);
 		printf("%d\n", PolyDegBy(&top, strtol(command + 7, NULL, 10)));
 	} else if (strncmp(command, "AT ", 3) == 0) { // TODO ERROR MSGS
-		Poly top = GetTop(s);
+		Poly top = Pop(s);
 		Poly p = PolyAt(&top, strtol(command + 3, NULL, 10));
-		PolyPrint(&p);
+		PolyDestroy(&top);
+		Push(s, &p);
 	} else {
 		PrintError(WRONG_COMMAND_ERR_MSG, row, 0);
 	}
@@ -284,17 +303,6 @@ void ExecuteCommand(Stack *s, char *command, unsigned row) {
 
 int main() {
 	Stack s = StackEmpty();
-
-	Poly p = PolyFromCoeff(1);
-	Mono m = MonoFromPoly(&p, 1);
-	Mono monos[1];
-	monos[0] = m;
-	Poly q = PolyAddMonos(1, monos);
-	Poly z = PolyZero();
-	Poly r = PolyMul(&q, &z);
-
-
-
 
 	char command_buf[MAX_COMMAND_LENGTH];
 	int ch;
