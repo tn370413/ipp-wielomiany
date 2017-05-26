@@ -1,3 +1,11 @@
+/** @file
+   Kalkulator działający na stosie wielomianów rzadkich wielu zmiennych.
+
+   @author Tomasz Necio <Tomasz.Necio@fuw.edu.pl>
+   @copyright Uniwersytet Warszawski
+   @date 2017-05-27
+*/
+
 #include <assert.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -7,73 +15,83 @@
 #include "poly.h"
 #include "stack.h"
 
-#define INITIAL_MONOS_SIZE 200
-#define MAX_COMMAND_LENGTH 24
+#define INITIAL_MONOS_SIZE 256 ///< początkowy rozmiar tablicy monosów dla PolyAddMonos w PolyParse
+#define MAX_COMMAND_LENGTH 25 ///< maksymalna długość komendy ("AT -LONG_MAX\n")
 
+/* Flagi oznaczające typy liczbowe dla funkcji parsujących liczby */
 #define POLY_EXP_T 1
 #define POLY_COEFF_T 2
 #define UNSIGNED 3
 
+/* Wiadomości błędów */
 #define UNDERFLOW_ERR_MSG "ERROR %d STACK UNDERFLOW\n"
 #define PARSING_ERR_MSG "ERROR %d %d\n"
 #define WRONG_COMMAND_ERR_MSG "ERROR %d WRONG COMMAND\n"
 #define WRONG_VALUE_ERR_MSG "ERROR %d WRONG VALUE\n"
 #define WRONG_VARIABLE_ERR_MSG "ERROR %d WRONG VARIABLE\n"
 
+/* Flagi błędów */
 #define EOF_FLAG 1
 #define UNDERFLOW_ERR_FLAG 2
 #define PARSING_ERR_FLAG 3
 #define WRONG_COMMAND_ERR_FLAG 4
 #define WRONG_VALUE_ERR_FLAG 5
 #define WRONG_VARIABLE_ERR_FLAG 6
+#define EXCEEDED_COMMAND_BUF_ERR 7
 
-/* Ideas on how to get cleaner code:
- * 1. join common parts of NumberParser and StringToLong
- * 2. have a common way of checking if the next characer \in allowed characters
- *    if last_character != '\n'
- */
-
-
-/* * * PARSER STATE * * */
+/* * * PARSER STATE AND ERROR HANDLING * * */
 
 /* These variables will hold the state of the whole parser */
-unsigned row = 0;
-unsigned column = 0;
-int error_flag = 0;
-char last_character;
+unsigned row = 0; ///< numer wiersza na którym jest parser (licząc od 0)
+unsigned column = 0; ///< numer kolumny na której jest parser
+int error_flag = 0; ///< flaga ostatnio wykrytego i nieobsłużoneo błędu
+bool end_of_line = false; ///< flaga wskazująca osiągnięcie końca wiersza
 
 /* Dummy structs for quick escape from functions on error */
-Poly DUMMY_POLY;
-Mono DUMMY_MONO;
+Poly DUMMY_POLY; ///< stała zwracana przez funkcje typu Poly w trakcie ucieczki z błędu
+Mono DUMMY_MONO; ///< stała zwracana przez funkcje typu Mono w trakcie ucieczki z błędu
 
+/**
+ * Ustawia flagę błędu.
+ * Ustawienie flagi błędu powinno wywołać jak najszybszą ucieczkę z kolejnych
+ * kontekstów aż do osiągnięcia main(), gdzie błąd będzie obsłużony przez
+ * ErrorHandle()
+ * @param[in] flag : flaga błędu
+ */
 void ErrorSetFlag(int flag) {
 	error_flag = flag;
 }
 
+/**
+ * Informuje o nieobsłużonych błędach.
+ * Funkcje po wywołaniu innej funkcji sprawdzają Error() i w razie wystąpienia
+ * błędu jak najszybciej 'propagują go' wyżej
+ * @return obecnie ustawiona flaga błędu (0, jeżeli błąd jeszcze nie wystąpił)
+ */
 int Error() {
 	return error_flag;
 }
 
-void ErrorPrint(char* msg) {
-	fprintf(stderr, msg, row + 1, column);
-}
-
+/**
+ * Obsługuje błąd – akcja zależy od ustawionej flagi błędu.
+ * W kontekscie zadania jedynie drukuje informację na stderr i resetuje flagę.
+ */
 void ErrorHandle() {
 	switch (error_flag) {
 	case UNDERFLOW_ERR_FLAG:
-		ErrorPrint(UNDERFLOW_ERR_MSG);
+		fprintf(stderr, UNDERFLOW_ERR_MSG, row + 1);
 		break;
 	case PARSING_ERR_FLAG:
-		ErrorPrint(PARSING_ERR_MSG);
+		fprintf(stderr, PARSING_ERR_MSG, row + 1, column);
 		break;
 	case WRONG_COMMAND_ERR_FLAG:
-		ErrorPrint(WRONG_COMMAND_ERR_MSG);
+		fprintf(stderr, WRONG_COMMAND_ERR_MSG, row + 1);
 		break;
 	case WRONG_VALUE_ERR_FLAG:
-		ErrorPrint(WRONG_VALUE_ERR_MSG);
+		fprintf(stderr, WRONG_VALUE_ERR_MSG, row + 1);
 		break;
 	case WRONG_VARIABLE_ERR_FLAG:
-		ErrorPrint(WRONG_VARIABLE_ERR_MSG);
+		fprintf(stderr, WRONG_VARIABLE_ERR_MSG, row + 1);
 		break;
 	default:
 		break;
@@ -83,6 +101,10 @@ void ErrorHandle() {
 
 /* * * OUTPUT FUNCTIONS * * */
 
+/**
+ * Drukuje wartość logiczną ze znakiem nowej linii.
+ * @param[in] val : wartość do wydrukowania
+ */
 void BoolPrint(bool val) {
 	if (val) {
 		printf("1\n");
@@ -91,16 +113,36 @@ void BoolPrint(bool val) {
 	}
 }
 
+/**
+ * Drukuje wielomiam.
+ * @param[in] p : wielomian do wydrukowania
+ */
 void PolyPrint(Poly *p);
 
+/**
+ * Drukuje jednomian.
+ * @param[in] m : jednomian do wydrukowania
+ */
 void MonoPrint(Mono *m) {
 	printf("(");
 	PolyPrint(&(m->p));
 	printf(",%d)", m->exp);
 }
 
-// move to poly.h
+/**
+ * Przekształca wielomian do postaci pozwalającej na wydrukowanie wg wymagań
+ * @param[in] p : wielomian do przygotowania
+ * @param[in] memory_flag : informuje funkcję wywołującą czy użyto alokacji pamięci
+ * @return wielomian gotowy do druku
+ */
 Poly PolyPrepareForPrint(Poly *p, bool *memory_flag) {
+	/* Wielomian w naszej implementacji mógłby chcieć się wydrukwać jako np.
+	 * "7+(((1,1),0)+(2,2),0)+(2,3)"
+	 * a powinien
+	 * "(((7,0)+(1,1),0)+(2,2),0)+(2,3)"
+	 * Łatwiej przekształcić wielomian w tej egzotycznej sytuacji, niż wykrywać
+	 * to w funkcji drukującej.
+	 */
 	if (p->scalar != 0 && p->monos_count > 1 && p->monos[0].exp == 0) {
 		Poly r = PolyClone(p);
 		r.scalar = 0;
@@ -112,12 +154,14 @@ Poly PolyPrepareForPrint(Poly *p, bool *memory_flag) {
 }
 
 void PolyPrint(Poly *p) {
-	if (PolyIsCoeff(p)) { // check this code if bugs happen
+	if (PolyIsCoeff(p)) {
 		printf("%ld", p->scalar);
 	} else {
 		bool was_memory_allocated = false;
 		Poly q = PolyPrepareForPrint(p, &was_memory_allocated);
 
+		/* jeżeli po preparacji został jakiś skalar, to znaczy ze nie było
+		 * jednomianu z exp = 0 gdzie trzeba by go było wsadzić */
 		if (q.scalar != 0) {
 			printf("(%ld,0)", q.scalar);
 		}
@@ -137,47 +181,71 @@ void PolyPrint(Poly *p) {
 
 /* * * INPUT FUNCTIONS * * */
 
-
+/**
+ * Podgląda następny znak z stdin bez usuwania go ze strumienia.
+ * @return znak na stdin
+ */
 int SeeChar() {
+	if (feof(stdin)) {
+		ErrorSetFlag(PARSING_ERR_FLAG);
+		return EOF;
+	}
 	int r = getchar();
 	ungetc(r, stdin);
 	return r;
 }
 
-
+/**
+ * Jak getchar(), plus aktualizuje stan parsera.
+ * @return getchar()
+ */
 int GetChar() {
+	int ch;
+	if ((ch = getchar()) == '\n') {
+		end_of_line = true;
+	} else {
+		end_of_line = false;
+	}
 	column++;
-	last_character = getchar();
-	return last_character;
+	return ch;
 }
 
-void UnGetChar(int ch) {
-	column--;
-	ungetc(ch, stdin);
-}
-
+/**
+ * Sprawdza czy znak jest literą
+ * @param[in] ch : znak
+ * @return Czy znak jest literą?
+ */
 bool IsLetter(int ch) {
 	return ('a' <= ch && ch <= 'z') || ('A' <= ch && ch <= 'Z');
 }
 
+/**
+ * Sprawdza czy znak jest cyfrą
+ * @param[in] ch : znak
+ * @param[in] exclude_minus : informuje czy dopuszczać znak minus?
+ * @return Czy znak jest cyfrą?
+ */
 bool IsDigit(int ch, bool exclude_minus) {
 	return ('0' <= ch && ch <= '9') || (!exclude_minus && (ch == '-'));
 }
 
+/**
+ * Przewija stdin do następnej linii.
+ * @param[in] eof_flag : informuje fukcję wywołującą, czy napotkano End Of File
+ */
 void GoToNextLine(bool *eof_flag) {
-	if (last_character == '\n') {
-		getchar();
-		return;
-	}
+	/* check if we haven't already reached the end of the line */
+	if (end_of_line) { return; }
 
 	int ch = SeeChar();
 
-	if (!Error() && ch != '\n') {
+	/* W momencie wywołania tej funkcji, nie powinno być już znaków na stdin */
+	if (!Error() && ch != '\n' && ch != EOF) {
 		column++;
 		ErrorSetFlag(PARSING_ERR_FLAG);
 	}
 
-	while (Error() && ch != '\n') {
+	while (Error() && ch != '\n' && ch != EOF) {
 		getchar();
 		ch = SeeChar();
 		if (ch == EOF) {
@@ -186,67 +254,106 @@ void GoToNextLine(bool *eof_flag) {
 		}
 	}
 
-	ch = getchar(); // should be '\n'
+	ch = getchar(); // must be '\n' or End Of File
 	if (ch == EOF) {
 		*eof_flag = true;
 	}
 }
 
+/**
+ * Wczytuje wielomian z stdin.
+ * @return wczytany wielomian
+ */
 Poly PolyParse();
 
-void ValidateNextDigit(long r, int digit, long max_val) {
+/**
+ * Sprawdza, czy do liczby r można dokleić cyfrę bez przekraczania limitu
+ * @param[in] r : liczba
+ * @param[in] digit : doklejana cyfra
+ * @param[in] max_val : limit
+ */
+void ValidateNextDigit(long r, int digit, bool minus, long max_val) {
 	if (r > max_val / 10 ||
-			(r == max_val / 10 && digit > max_val % 10)) {
+			(r == max_val / 10 && digit > (max_val % 10) + minus)) {
 		ErrorSetFlag(PARSING_ERR_FLAG);
 	}
 }
 
-long NumberParse(int type) {
-	if (!IsDigit(SeeChar(), false)) {
-		GetChar();
+/**
+ * Wczytuje liczbę z tablicy znaków lub stdin, jeżeli nie podano tablicy
+ * @param[in] c : tablica znaków
+ * @param[in] type : flaga typu liczby, słuzy do obsługi niepoprawnych wartości
+ * @return wczytana liczba
+ */
+long NumberRead(char *c, int type) {
+	if ((c && !IsDigit(c[0], false)) ||
+	   (!c && !IsDigit(SeeChar(), false))) {
+		if (!c) { GetChar(); }
 		ErrorSetFlag(PARSING_ERR_FLAG);
 		return 0;
 	}
 
+	/* obsługa minusa */
 	bool minus = false;
-	if (SeeChar() == '-') {
+	if ((!c && SeeChar() == '-') ||
+		(c && c[0] == '-')) {
 		if (type == POLY_EXP_T || type == UNSIGNED) {
 			ErrorSetFlag(PARSING_ERR_FLAG);
 			return 0;
 		}
+
 		minus = true;
-		GetChar();
+		if (c) {
+			c++;
+		} else {
+			GetChar(); // '-'
+		}
 	}
 
 	int ch;
+	if (c) {
+		ch = c[0];
+	} else {
+		ch = SeeChar();
+	}
 	int digit;
-	unsigned i = 0;
 	long r = 0;
-	while (IsDigit(ch = GetChar(), true)) {
-		digit = ch - 48;
+	while (IsDigit(ch, true)) {
+		if (c) {
+			c++;
+		} else {
+			ch = GetChar();
+		}
+		digit = ch - 48; // '0' = 48
 
 		switch (type) {
 		case POLY_EXP_T:
-			ValidateNextDigit(r, digit, POLY_EXP_MAX);
+			ValidateNextDigit(r, digit, minus, POLY_EXP_MAX);
 			break;
 		case POLY_COEFF_T:
-			ValidateNextDigit(r, digit, POLY_COEFF_MAX);
+			ValidateNextDigit(r, digit, minus,  POLY_COEFF_MAX);
 			break;
 		case UNSIGNED:
-			ValidateNextDigit(r, digit, UINT32_MAX);
+			ValidateNextDigit(r, digit, minus, UINT32_MAX);
 			break;
 		default:
 			assert(false);
 			break;
 		}
-		if (Error()) {
-			return 0;
-		}
+		if (Error()) { return 0; }
 
 		r = 10 * r + digit;
-		i++;
+		if (c) {
+			ch = c[0];
+		} else {
+			ch = SeeChar();
+		}
 	}
-	UnGetChar(ch);
+
+	if (c && c[0] != '\0') {
+		ErrorSetFlag(PARSING_ERR_FLAG);
+		return 0;
+	}
 
 	if (minus) {
 		return -r;
@@ -254,6 +361,19 @@ long NumberParse(int type) {
 	return r;
 }
 
+/**
+ * Wczytuje liczbę z stdin
+ * @param[in] type : flaga typu liczby, używana do obsługi błędnych wartości
+ * @return wczytana liczba
+ */
+long NumberParse(int type) {
+	return NumberRead(NULL, type);
+}
+
+/**
+ * Wczytuje jednomian ze stdin.
+ * @return wczytany jednomian
+ */
 Mono MonoParse() {
 	if (GetChar() != '(') {
 		ErrorSetFlag(PARSING_ERR_FLAG);
@@ -288,6 +408,8 @@ Mono MonoParse() {
 
 Poly PolyParse() {
 	if (SeeChar() == '(') { /* array of monos */
+		/* we create a dynamic array of monos and will be growing it when
+		 * there's a need for more space */
 		size_t monos_size = INITIAL_MONOS_SIZE;
 		Mono *monos = calloc(monos_size, sizeof(Mono));
 		assert(monos != NULL);
@@ -308,10 +430,10 @@ Poly PolyParse() {
 			}
 
 			monos_count++;
-			if ((c = SeeChar()) != '+') {
+			if ((c = SeeChar()) != '+') { // probably ',' or '\n' or 'EOF'
 				break;
 			} else {
-				GetChar(); // +
+				GetChar(); // '+'
 			}
 		}
 
@@ -322,6 +444,7 @@ Poly PolyParse() {
 	} else /* a scalar */ {
 		poly_coeff_t r = NumberParse(POLY_COEFF_T);
 		if (Error()) { return DUMMY_POLY; }
+
 		return PolyFromCoeff(r);
 	}
 }
@@ -329,6 +452,11 @@ Poly PolyParse() {
 
 /* * * POLY OPERATIONS * * */
 
+/**
+ * jak GetTop(), ale sprawdza, czy na stosie jest wielomian
+ * @param[in] s : stos
+ * @return GetTop(s)
+ */
 Poly GetTopSafely(Stack *s) {
 	if (IsEmpty(s)) {
 		ErrorSetFlag(UNDERFLOW_ERR_FLAG);
@@ -337,6 +465,11 @@ Poly GetTopSafely(Stack *s) {
 	return GetTop(s);
 }
 
+/**
+ * Jak Pop(), ale sprawdza czy na stosie jest wielomian do zrzucenia
+ * @param[in] s : stos
+ * @return Pop(s)
+ */
 Poly PopSafely(Stack *s) {
 	if (IsEmpty(s)) {
 		ErrorSetFlag(UNDERFLOW_ERR_FLAG);
@@ -345,6 +478,12 @@ Poly PopSafely(Stack *s) {
 	return Pop(s);
 }
 
+/**
+ * Działa operacją na dwóch wielomianach na wierzchu stosu i wynik wstawia na
+ * ich miejsce.
+ * @param[in] s : stos
+ * @param[in] op : działanie wielomian x wielomian → wielomian
+ */
 void ActOnTwoPolysOnStack(Stack *s,
 						  Poly (*op)(const Poly *, const Poly *)) {
 	Poly p = PopSafely(s);
@@ -352,6 +491,7 @@ void ActOnTwoPolysOnStack(Stack *s,
 
 	Poly q = PopSafely(s);
 	if (Error()) {
+		/* zwracamy p, żeby stos był w takim stanie jak przed errorem */
 		Push(s, &p);
 		return;
 	}
@@ -363,18 +503,34 @@ void ActOnTwoPolysOnStack(Stack *s,
 	Push(s, &r);
 }
 
+/**
+ * Zastępuje dwa wielomiany na wierzchu stosu ich sumą
+ * @param[in] s : stos
+ */
 void AddTwoPolysFromStack(Stack *s) {
 	return ActOnTwoPolysOnStack(s, PolyAdd);
 }
 
+/**
+ * Zastępuje dwa wielomiany na wierzchu stosu ich iloczynem
+ * @param[in] s : stos
+ */
 void MultiplyTwoPolysFromStack(Stack *s) {
 	return ActOnTwoPolysOnStack(s, PolyMul);
 }
 
+/**
+ * Zastępuje dwa wielomiany na wierzchu stosu ich różnicą
+ * @param[in] s : stos
+ */
 void SubtractTwoPolysFromStack(Stack *s) {
 	return ActOnTwoPolysOnStack(s, PolySub);
 }
 
+/**
+ * Drukuje, czy dwa wielomiany na wierzchu stosu są równe
+ * @param[in] s : stos
+ */
 void PrintAreEqualTwoPolysFromStack(Stack *s) {
 	Poly p = PopSafely(s);
 	if (Error()) { return; }
@@ -390,6 +546,10 @@ void PrintAreEqualTwoPolysFromStack(Stack *s) {
 	BoolPrint(r);
 }
 
+/**
+ * Drukuje czy wielomian na wierzchu stosu jest skalarem
+ * @param[in] s : stos
+ */
 void IsCoeffPolyOnStack(Stack *s) {
 	Poly top = GetTopSafely(s);
 	if (Error()) { return; }
@@ -397,6 +557,10 @@ void IsCoeffPolyOnStack(Stack *s) {
 	BoolPrint(PolyIsCoeff(&top));
 }
 
+/**
+ * Drukuje czy wielomian na wierzchu stosu jest zerem
+ * @param[in] s : stos
+ */
 void IsZeroPolyOnStack(Stack *s) {
 	Poly top = GetTopSafely(s);
 	if (Error()) { return; }
@@ -404,6 +568,10 @@ void IsZeroPolyOnStack(Stack *s) {
 	BoolPrint(PolyIsZero(&top));
 }
 
+/**
+ * Wrzuca na stos kopię wielomianu na wierzchu tego stosu
+ * @param[in] s : stos
+ */
 void ClonePolyOnStack(Stack *s) {
 	Poly top = GetTopSafely(s);
 	if (Error()) { return; }
@@ -412,6 +580,10 @@ void ClonePolyOnStack(Stack *s) {
 	Push(s, &p);
 }
 
+/**
+ * Zastępuje wielomian na wierzchu stosu jego przeciwieństwem
+ * @param[in] s : stos
+ */
 void NegatePolyOnStack(Stack *s) {
 	Poly p = PopSafely(s);
 	if (Error()) { return; }
@@ -421,6 +593,10 @@ void NegatePolyOnStack(Stack *s) {
 	Push(s, &q);
 }
 
+/**
+ * Drukuje stopień wielomianu znajdujacego się na wierzchu stosu
+ * @param[in] s : stos
+ */
 void PrintDegreePolyOnStack(Stack *s) {
 	Poly top = GetTopSafely(s);
 	if (Error()) { return; }
@@ -428,6 +604,10 @@ void PrintDegreePolyOnStack(Stack *s) {
 	printf("%d\n", PolyDeg(&top));
 }
 
+/**
+ * Drukuje wielomian znajdujący się na wierzchu stosu.
+ * @param[in] s : stos
+ */
 void PrintPolyOnStack(Stack *s) {
 	Poly top = GetTopSafely(s);
 	if (Error()) { return; }
@@ -436,94 +616,43 @@ void PrintPolyOnStack(Stack *s) {
 	printf("\n");
 }
 
-long StringToLong(char *c, int type) {
-	if (!IsDigit(c[0], false)) {
-		ErrorSetFlag(PARSING_ERR_FLAG);
-		return 0;
-	}
-
-	bool minus = false;
-	if (c[0] == '-') {
-		if (type == POLY_EXP_T || type == UNSIGNED) {
-			ErrorSetFlag(PARSING_ERR_FLAG);
-			return 0;
-		}
-		minus = true;
-		c++;
-	}
-
-	int ch;
-	int digit;
-	unsigned i = 0;
-	long r = 0;
-	while (IsDigit(ch = c[i], true)) {
-		digit = ch - 48;
-
-		switch (type) {
-		case POLY_EXP_T:
-			ValidateNextDigit(r, digit, POLY_EXP_MAX);
-			break;
-		case POLY_COEFF_T:
-			ValidateNextDigit(r, digit, POLY_COEFF_MAX);
-			break;
-		case UNSIGNED:
-			ValidateNextDigit(r, digit, UINT32_MAX);
-			break;
-		default:
-			assert(false);
-			break;
-		}
-		if (Error()) {
-			return 0;
-		}
-
-		r = 10 * r + digit;
-		i++;
-	}
-
-	if (ch != '\0') {
-		ErrorSetFlag(PARSING_ERR_FLAG);
-		return 0;
-	}
-
-	if (minus) {
-		return -r;
-	}
-	return r;
-}
-
-void PrintDegBy(Stack *s, char *command) {
-	unsigned arg = StringToLong(command + 7, UNSIGNED);
-	if (Error()) {
-		ErrorSetFlag(WRONG_VARIABLE_ERR_FLAG);
-		return;
-	}
-
+/**
+ * Drukuje stopień wielomianu na wierzchu stosu ze względu na n-tą zmienną
+ * @param[in] s : stos
+ * @param[in] n : n
+ */
+void PrintDegBy(Stack *s, unsigned n) {
 	Poly top = GetTopSafely(s);
 	if (Error()) { return; }
 
-	int r = PolyDegBy(&top, arg);
+	int r = PolyDegBy(&top, n);
 	printf("%d\n", r);
 }
 
-void CalculatePolyAt(Stack *s, char *command) {
-	poly_coeff_t arg = StringToLong(command + 3, POLY_COEFF_T);
-	if (Error()) {
-		ErrorSetFlag(WRONG_VALUE_ERR_FLAG);
-		return;
-	}
+/**
+ * Zastępuje wielomian na wierzchu stosu jego "wartością w punkcie x"
+ * (obcięciem do zbioru `{(x_1, x_2, ...) : x_1 = x}`)
+ * @param[in] s : stos
+ * @param[in] x : x
+ */
+void CalculatePolyAt(Stack *s, poly_coeff_t x) {
+
 
 	Poly top = PopSafely(s);
 	if (Error()) { return; }
 
-	Poly p = PolyAt(&top, arg);
+	Poly p = PolyAt(&top, x);
 	PolyDestroy(&top);
 	Push(s, &p);
 }
 
 /* * * THE PROGRAM * * */
 
-
+/**
+ * Wykonuje komendę zawartą w tablicy znaków.
+ * @param[in] s : stos wielomianów na którym operujemy
+ * @param[in] command : tablica znaków zawierająca komendę do wykonania
+ */
 void ExecuteCommand(Stack *s, char *command) {
 	if (strcmp(command, "ZERO") == 0) {
 		Poly p = PolyZero();
@@ -565,34 +694,81 @@ void ExecuteCommand(Stack *s, char *command) {
 		PolyDestroy(&p);
 
 	} else if (strncmp(command, "DEG_BY ", 7) == 0) {
-		PrintDegBy(s, command);
+		if (Error() == EXCEEDED_COMMAND_BUF_ERR) {
+			ErrorSetFlag(WRONG_VARIABLE_ERR_FLAG);
+			return;
+		}
+
+		unsigned arg = NumberRead(command + 7, UNSIGNED);
+		if (Error()) {
+			ErrorSetFlag(WRONG_VARIABLE_ERR_FLAG);
+			return;
+		}
+		PrintDegBy(s, arg);
 
 	} else if (strncmp(command, "AT ", 3) == 0) {
-		CalculatePolyAt(s, command);
+		if (Error() == EXCEEDED_COMMAND_BUF_ERR) {
+			ErrorSetFlag(WRONG_VALUE_ERR_FLAG);
+			return;
+		}
+
+		poly_coeff_t arg = NumberRead(command + 3, POLY_COEFF_T);
+		if (Error()) {
+			ErrorSetFlag(WRONG_VALUE_ERR_FLAG);
+			return;
+		}
+		CalculatePolyAt(s, arg);
 
 	} else {
 		ErrorSetFlag(WRONG_COMMAND_ERR_FLAG);
 	}
 }
 
+/**
+ * Główna funkcja programu.
+ * @return flaga ostatniego nieobsłużonego błędu
+ */
 int main() {
 	Stack s = StackEmpty();
 
 	char command_buf[MAX_COMMAND_LENGTH] = {'\0'};
+	size_t new_line_pos;
 	int ch;
 	bool eof_flag = false;
 
 	while (!eof_flag) {
+		end_of_line = false;
 		column = 0;
+
 		ch = SeeChar();
 		if (ch == EOF) {
 			break;
-		} else if (IsLetter(ch)) {
+		} else if (IsLetter(ch)) { /* komenda */
+			/* komendy możemy trzymać w buforze o ograniczonej pojemności */
 			fgets(command_buf, sizeof command_buf, stdin);
-			command_buf[strcspn(command_buf, "\r\n")] = 0;
+
+			new_line_pos = strcspn(command_buf, "\r\n");
+			if (!(new_line_pos == MAX_COMMAND_LENGTH - 1)) {
+				/* Gdzieś w buforze jest '\n'. Po przeczytaniu go więc
+				   skończy się już linia i musimy to pamiętać.
+				*/
+				end_of_line = true;
+				command_buf[new_line_pos] = 0;
+			} else {
+				/* Ktoś wprowadził zbyt długą komendę lub argument.
+				   Nie możemy jeszcze obsłużyć błędu, bo zależnie od komendy
+				   będziemy podawać różne komunikaty. */
+				ErrorSetFlag(EXCEEDED_COMMAND_BUF_ERR);
+			}
+
 			ExecuteCommand(&s, command_buf);
-			ErrorHandle();
-		} else {
+
+			if (Error()) {
+				ErrorHandle();
+				GoToNextLine(&eof_flag);
+			}
+
+		} else { /* wielomian */
 			Poly p = PolyParse();
 			GoToNextLine(&eof_flag);
 			if (!(Error())) {
@@ -605,4 +781,5 @@ int main() {
 	}
 
 	StackDestroy(&s);
+	return error_flag;
 }
