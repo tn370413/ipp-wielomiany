@@ -18,26 +18,23 @@
 #define INITIAL_MONOS_SIZE 256 ///< początkowy rozmiar tablicy monosów dla PolyAddMonos w PolyParse
 #define MAX_COMMAND_LENGTH 25 ///< maksymalna długość komendy ("AT -LONG_MAX\n")
 
-/* Flagi oznaczające typy liczbowe dla funkcji parsujących liczby */
-#define POLY_EXP_T 1
-#define POLY_COEFF_T 2
-#define UNSIGNED 3
+/** Flagi oznaczające typy liczbowe dla funkcji parsujących liczby */
+enum int_type_t [
+    POLY_EXP_T,
+    POLY_COEFF_T,
+    UNSIGNED
+]
 
-/* Wiadomości błędów */
-#define UNDERFLOW_ERR_MSG "ERROR %d STACK UNDERFLOW\n"
-#define PARSING_ERR_MSG "ERROR %d %d\n"
-#define WRONG_COMMAND_ERR_MSG "ERROR %d WRONG COMMAND\n"
-#define WRONG_VALUE_ERR_MSG "ERROR %d WRONG VALUE\n"
-#define WRONG_VARIABLE_ERR_MSG "ERROR %d WRONG VARIABLE\n"
-
-/* Flagi błędów */
-#define EOF_FLAG 1
-#define UNDERFLOW_ERR_FLAG 2
-#define PARSING_ERR_FLAG 3
-#define WRONG_COMMAND_ERR_FLAG 4
-#define WRONG_VALUE_ERR_FLAG 5
-#define WRONG_VARIABLE_ERR_FLAG 6
-#define EXCEEDED_COMMAND_BUF_ERR 7
+/** Flagi błędów */
+enum error_flag_t {
+    EOF_FLAG,
+    UNDERFLOW_ERR_FLAG,
+    PARSING_ERR_FLAG,
+    WRONG_COMMAND_ERR_FLAG,
+    WRONG_VALUE_ERR_FLAG,
+    WRONG_VARIABLE_ERR_FLAG,
+    EXCEEDED_COMMAND_BUF_ERR
+}
 
 /* * * PARSER STATE AND ERROR HANDLING * * */
 
@@ -79,19 +76,19 @@ int Error() {
 void ErrorHandle() {
 	switch (error_flag) {
 	case UNDERFLOW_ERR_FLAG:
-		fprintf(stderr, UNDERFLOW_ERR_MSG, row + 1);
+		fprintf(stderr, "ERROR %d STACK UNDERFLOW\n", row + 1);
 		break;
 	case PARSING_ERR_FLAG:
-		fprintf(stderr, PARSING_ERR_MSG, row + 1, column);
+		fprintf(stderr, "ERROR %d %d\n", row + 1, column);
 		break;
 	case WRONG_COMMAND_ERR_FLAG:
-		fprintf(stderr, WRONG_COMMAND_ERR_MSG, row + 1);
+		fprintf(stderr, "ERROR %d WRONG COMMAND\n", row + 1);
 		break;
 	case WRONG_VALUE_ERR_FLAG:
-		fprintf(stderr, WRONG_VALUE_ERR_MSG, row + 1);
+		fprintf(stderr, "ERROR %d WRONG VALUE\n", row + 1);
 		break;
 	case WRONG_VARIABLE_ERR_FLAG:
-		fprintf(stderr, WRONG_VARIABLE_ERR_MSG, row + 1);
+		fprintf(stderr, "ERROR %d WRONG VARIABLE\n", row + 1);
 		break;
 	default:
 		break;
