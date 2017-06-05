@@ -713,7 +713,7 @@ Poly MonoCompose(const Mono *m, unsigned count, const Poly x[]) {
  * @return p(x[0], x[1], ..., x[count - 1], 0, 0, 0, ...)
  */
 Poly PolyCompose(const Poly *p, unsigned count, const Poly x[]) {
-	Poly r = PolyZero();
+	Poly r = PolyFromCoeff(p->scalar);
 	Poly tmp;
 	Poly nr;
 	for (unsigned i = 0; i < p->monos_count; i++) {
