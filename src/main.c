@@ -635,7 +635,8 @@ void ComposePolysOnStack(Stack *s, unsigned count) {
 	for (unsigned i = 0; i < count; i++) {
 		x[i] = Pop(s);
 	}
-	Push(s, PolyCompose(&p, count, x));
+	Poly r = PolyCompose(&p, count, x);
+	Push(s, &r);
 	
 	PolyDestroy(&p);
 	for (unsigned i = 0; i < count; i++) {
