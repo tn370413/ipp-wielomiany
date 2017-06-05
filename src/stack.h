@@ -101,4 +101,14 @@ static inline bool IsEmpty(Stack *s) {
 	return (s->element_count == 0);
 }
 
+/**
+ * Sprawdza, czy na stosie jest co najmniej @count elementów.
+ * @param[in] s : stos
+ * @param[in] count : oczekiwana liczba elementów
+ * @return Na stosie jest co najmniej count elementów
+ */
+static inline bool HasElements(Stack *s, unsigned count) {
+	return (s->element_count >= count);
+}
+
 #endif

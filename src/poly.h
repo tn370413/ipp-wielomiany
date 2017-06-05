@@ -214,4 +214,12 @@ bool PolyIsEq(const Poly *p, const Poly *q);
  */
 Poly PolyAt(const Poly *p, poly_coeff_t x);
 
+/**
+ * Zwraca wielomian @p w którym pod i-tą zmienną podstawia wielomian x[i]
+ * @param[in] p : wielomian "główny"
+ * @param[in] count : długość tablicy x
+ * @param[in] x : tablica wielomianów
+ * @return p(x[0], x[1], ..., x[count - 1], 0, 0, 0, ...)
+ */
+Poly PolyCompose(const Poly *p, unsigned count, const Poly x[]);
 #endif /* __POLY_H__ */

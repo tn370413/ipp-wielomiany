@@ -604,8 +604,11 @@ bool PolyIsEq(const Poly *p, const Poly *q) {
 	return true;
 }
 
-/* Podnosi l. całk. do potęgi (zapobiega overflow) */
-
+/** Podnosi l. całk. do potęgi (zapobiega overflow) 
+ * @param[in] x : baza
+ * @param[in] e : wykładnik
+ * @return @f$x^e @f$
+ */
 poly_coeff_t Pow(poly_coeff_t x, poly_exp_t e) {
 	poly_coeff_t r = 1;
 	while (e) {
@@ -617,6 +620,31 @@ poly_coeff_t Pow(poly_coeff_t x, poly_exp_t e) {
 	}
 	return r;
 }
+
+/** Podnosi wielomian do potęgi
+ * @param[in] p : wielomian
+ * @param[in] e : wykładnik
+ * @return @f$x^e @f$
+ */
+ Poly PolyPow(const Poly *p, poly_exp_t e) {
+ 	Poly r = PolyFromCoeff(1);
+ 	Poly q = PolyClone(p);
+ 	Poly nr;
+ 	Poly nq;
+ 	while (e) {
+ 		if (e & 1) {
+ 			nr = PolyMul(&r, &q);
+ 			PolyDestroy(&r);
+ 			r = nr;
+		}
+		e >>= 1;
+		nq = PolyMul(&q, &q);
+		PolyDestroy(&q);
+		q = nq;
+	}
+	PolyDestroy(&q);
+	return r;
+ }
 
 /**
  * Wylicza wartość wielomianu w punkcie @p x.
@@ -654,4 +682,46 @@ Poly PolyAt(const Poly *p, poly_coeff_t x) {
 	}
 
 	return nr;
+}
+
+/**
+ * Zwraca wielomian utworzony przez zamianę w jednomianie @m TODO
+ * @param[in] m : jednomian
+ * @param[in] count : długość tablicy x
+ * @param[in] x : tablica wielomianów
+ * @return wielomian
+ */ 
+Poly MonoCompose(const Mono *m, unsigned count, const Poly x[]) {
+	Poly p = PolyPow(x, m->exp);
+	Poly q;
+	if (count == 0) {
+		q = m->p;
+	} else {
+		q = PolyCompose(&(m->p), count - 1, x + 1);
+	}
+	Poly r = PolyMul(&p, &q);
+	PolyDestroy(&p);
+	PolyDestroy(&q);
+	return r;
+}
+
+/**
+ * Zwraca wielomian @p w którym pod i-tą zmienną podstawia wielomian x[i]
+ * @param[in] p : wielomian "główny"
+ * @param[in] count : długość tablicy x
+ * @param[in] x : tablica wielomianów
+ * @return p(x[0], x[1], ..., x[count - 1], 0, 0, 0, ...)
+ */
+Poly PolyCompose(const Poly *p, unsigned count, const Poly x[]) {
+	Poly r = PolyZero();
+	Poly tmp;
+	Poly nr;
+	for (unsigned i = 0; i < p->monos_count; i++) {
+		tmp = MonoCompose(&(p->monos[i]), count, x);
+		nr = PolyAdd(&tmp, &r);
+		PolyDestroy(&tmp);
+		PolyDestroy(&r);
+		r = nr;
+	}
+	return r;
 }

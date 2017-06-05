@@ -34,7 +34,8 @@ enum error_flag_e {
     WRONG_COMMAND_ERR_FLAG,
     WRONG_VALUE_ERR_FLAG,
     WRONG_VARIABLE_ERR_FLAG,
-    EXCEEDED_COMMAND_BUF_ERR
+    EXCEEDED_COMMAND_BUF_ERR,
+    WRONG_COUNT_ERR_FLAG
 };
 
 /* * * PARSER STATE AND ERROR HANDLING * * */
@@ -91,6 +92,9 @@ void ErrorHandle() {
 	case WRONG_VARIABLE_ERR_FLAG:
 		fprintf(stderr, "ERROR %d WRONG VARIABLE\n", row + 1);
 		break;
+	case WRONG_COUNT_ERR_FLAG:
+		fprintf(stderr, "ERROR %d WRONG COUNT\n", row + 1);
+		break;		
 	default:
 		break;
 	}
@@ -614,6 +618,31 @@ void PrintPolyOnStack(Stack *s) {
 	printf("\n");
 }
 
+/** Polecenie to zdejmuje z wierzchołka stosu najpierw wielomian p, a potem 
+ * kolejno wielomiany x[0], x[1], …, x[count - 1] i umieszcza na stosie wynik
+ * funkcji PolyCompose
+ * @param[in] s : stos
+ * @param[in] count : liczba wielomianów do zmielenia
+*/
+void ComposePolysOnStack(Stack *s, unsigned count) {
+	if (!HasElements(s, count + 1)) {
+		ErrorSetFlag(UNDERFLOW_ERR_FLAG);
+		return;
+	}
+	
+	Poly p = Pop(s);
+	Poly x[count];
+	for (unsigned i = 0; i < count; i++) {
+		x[i] = Pop(s);
+	}
+	Push(s, PolyCompose(&p, count, x));
+	
+	PolyDestroy(&p);
+	for (unsigned i = 0; i < count; i++) {
+		PolyDestroy(&(x[i]));
+	}
+}
+
 /**
  * Drukuje stopień wielomianu na wierzchu stosu ze względu na n-tą zmienną
  * @param[in] s : stos
@@ -690,6 +719,20 @@ void ExecuteCommand(Stack *s, char *command) {
 		Poly p = PopSafely(s);
 		if (Error()) { return; }
 		PolyDestroy(&p);
+		
+	
+	} else if (strncmp(command, "COMPOSE ", 8) == 0) {
+		if (Error() == EXCEEDED_COMMAND_BUF_ERR) {
+			ErrorSetFlag(WRONG_VARIABLE_ERR_FLAG);
+			return;
+		}
+
+		unsigned arg = NumberRead(command + 8, UNSIGNED);
+		if (Error()) {
+			ErrorSetFlag(WRONG_VARIABLE_ERR_FLAG);
+			return;
+		}
+		ComposePolysOnStack(s, arg);
 
 	} else if (strncmp(command, "DEG_BY ", 7) == 0) {
 		if (Error() == EXCEEDED_COMMAND_BUF_ERR) {
@@ -699,7 +742,7 @@ void ExecuteCommand(Stack *s, char *command) {
 
 		unsigned arg = NumberRead(command + 7, UNSIGNED);
 		if (Error()) {
-			ErrorSetFlag(WRONG_VARIABLE_ERR_FLAG);
+			ErrorSetFlag(WRONG_COUNT_ERR_FLAG);
 			return;
 		}
 		PrintDegBy(s, arg);
@@ -716,7 +759,7 @@ void ExecuteCommand(Stack *s, char *command) {
 			return;
 		}
 		CalculatePolyAt(s, arg);
-
+		
 	} else {
 		ErrorSetFlag(WRONG_COMMAND_ERR_FLAG);
 	}
