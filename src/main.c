@@ -19,14 +19,15 @@
 #define MAX_COMMAND_LENGTH 25 ///< maksymalna długość komendy ("AT -LONG_MAX\n")
 
 /** Flagi oznaczające typy liczbowe dla funkcji parsujących liczby */
-enum int_type_t [
+enum int_type_e {
     POLY_EXP_T,
     POLY_COEFF_T,
     UNSIGNED
-]
+};
 
 /** Flagi błędów */
-enum error_flag_t {
+enum error_flag_e {
+	NO_ERROR,
     EOF_FLAG,
     UNDERFLOW_ERR_FLAG,
     PARSING_ERR_FLAG,
@@ -34,14 +35,14 @@ enum error_flag_t {
     WRONG_VALUE_ERR_FLAG,
     WRONG_VARIABLE_ERR_FLAG,
     EXCEEDED_COMMAND_BUF_ERR
-}
+};
 
 /* * * PARSER STATE AND ERROR HANDLING * * */
 
 /* These variables will hold the state of the whole parser */
 unsigned row = 0; ///< numer wiersza na którym jest parser (licząc od 0)
 unsigned column = 0; ///< numer kolumny na której jest parser
-int error_flag = 0; ///< flaga ostatnio wykrytego i nieobsłużoneo błędu
+enum error_flag_e error_flag = NO_ERROR; ///< flaga ostatnio wykrytego i nieobsłużoneo błędu
 bool end_of_line = false; ///< flaga wskazująca osiągnięcie końca wiersza
 
 /* Dummy structs for quick escape from functions on error */
@@ -55,7 +56,7 @@ Mono DUMMY_MONO; ///< stała zwracana przez funkcje typu Mono w trakcie ucieczki
  * ErrorHandle()
  * @param[in] flag : flaga błędu
  */
-void ErrorSetFlag(int flag) {
+void ErrorSetFlag(enum error_flag_e flag) {
 	error_flag = flag;
 }
 
@@ -282,7 +283,7 @@ void ValidateNextDigit(long r, int digit, bool minus, long max_val) {
  * @param[in] type : flaga typu liczby, słuzy do obsługi niepoprawnych wartości
  * @return wczytana liczba
  */
-long NumberRead(char *c, int type) {
+long NumberRead(char *c, enum int_type_e type) {
 	if ((c && !IsDigit(c[0], false)) ||
 	   (!c && !IsDigit(SeeChar(), false))) {
 		if (!c) { GetChar(); }
