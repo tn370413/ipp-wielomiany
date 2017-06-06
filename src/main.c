@@ -724,13 +724,13 @@ void ExecuteCommand(Stack *s, char *command) {
 	
 	} else if (strncmp(command, "COMPOSE ", 8) == 0) {
 		if (Error() == EXCEEDED_COMMAND_BUF_ERR) {
-			ErrorSetFlag(WRONG_VARIABLE_ERR_FLAG);
+			ErrorSetFlag(WRONG_COUNT_ERR_FLAG);
 			return;
 		}
 
 		unsigned arg = NumberRead(command + 8, UNSIGNED);
 		if (Error()) {
-			ErrorSetFlag(WRONG_VARIABLE_ERR_FLAG);
+			ErrorSetFlag(WRONG_COUNT_ERR_FLAG);
 			return;
 		}
 		ComposePolysOnStack(s, arg);

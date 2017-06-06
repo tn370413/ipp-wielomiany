@@ -697,7 +697,7 @@ Poly MonoCompose(const Mono *m, unsigned count, const Poly x[]) {
 	if (count == 0) {
 		q = m->p;
 	} else {
-		q = PolyCompose(&(m->p), count - 1, x + 1);
+		q = PolyCompose(&(m->p), count - 1, &(x[1]));
 	}
 	Poly r = PolyMul(&p, &q);
 	PolyDestroy(&p);
