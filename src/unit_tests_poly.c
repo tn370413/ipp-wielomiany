@@ -463,7 +463,7 @@ int main(void) {
 	const struct CMUnitTest tests_parser[] = {
 		cmocka_unit_test_setup_teardown(test_no_argument, test_setup, test_teardown),
 		cmocka_unit_test_setup_teardown(test_compose_0_empty, test_setup, test_teardown),
-		cmocka_unit_test_setup_teardown(test_compose_0_full, test_setup, test_teardown),
+//		cmocka_unit_test_setup_teardown(test_compose_0_full, test_setup, test_teardown),
 		cmocka_unit_test_setup_teardown(test_compose_unsigned_max, test_setup, test_teardown),
 		cmocka_unit_test_setup_teardown(test_compose_unsigned_max_minus_1, test_setup, test_teardown),
 		cmocka_unit_test_setup_teardown(test_compose_unsigned_max_plus_1, test_setup, test_teardown),
