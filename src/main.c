@@ -15,6 +15,8 @@
 #include "poly.h"
 #include "stack.h"
 
+#include "unit_tests_poly_utils.h"
+
 #define INITIAL_MONOS_SIZE 256 ///< początkowy rozmiar tablicy monosów dla PolyAddMonos w PolyParse
 #define MAX_COMMAND_LENGTH 25 ///< maksymalna długość komendy ("AT -LONG_MAX\n")
 
@@ -783,6 +785,14 @@ int main() {
 		column = 0;
 
 		ch = SeeChar();
+
+		printf("AA: ");
+
+		int chs[5] = {ch, '=', '\n', '\0'};
+
+		printf(&chs);
+
+
 		if (ch == EOF) {
 			break;
 		} else if (IsLetter(ch)) { /* komenda */
