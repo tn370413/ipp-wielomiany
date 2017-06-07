@@ -2,6 +2,12 @@
    Testy jednostkowe funkcji PolyCompose i polecenia "COMPOSE"
    kalkulatora wielomianów
 
+   Użyto fragmentów "calculator_test.c" by
+ * Copyright 2008 Google Inc.
+ * Copyright 2015 Tomasz Kociumaka
+ * Copyright 2016, 2017 IPP team
+   udostępnionego na licencji Apache (http://www.apache.org/licenses/LICENSE-2.0)
+
    @author Tomasz Necio <Tomasz.Necio@fuw.edu.pl>
    @copyright Uniwersytet Warszawski
    @date 2017-06-06
@@ -12,6 +18,7 @@
 #include <setjmp.h>
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
 
 #include "cmocka.h"
 
@@ -140,6 +147,28 @@ static void test_poly_x_compose_x(void **state) {
 /* * * TESTY PARSERA * * */
 
 
+static jmp_buf jmp_at_exit;
+static int exit_status;
+
+
+/**
+ * Atrapa funkcji main
+ */
+int mock_main() {
+	if (!setjmp(jmp_at_exit))
+		return calculator_main();
+	return exit_status;
+}
+
+/**
+ * Atrapa funkcji exit
+ */
+void mock_exit(int status) {
+	exit_status = status;
+	longjmp(jmp_at_exit, 1);
+}
+
+
 /* Pomocnicze bufory, do których piszą atrapy funkcji printf i fprintf oraz
 pozycje zapisu w tych buforach. Pozycja zapisu wskazuje bajt o wartości 0. TODO*/
 static char fprintf_buffer[256];
@@ -147,9 +176,6 @@ static char printf_buffer[256];
 static int fprintf_position = 0;
 static int printf_position = 0;
 
-/* Atrapa stdin */
-static int stdin_buffer[256] = {'\0'};
-static int stdin_position = 0;
 
 /* Atrapa funkcji printf TODO */
 int mock_printf(const char *format, ...) {
@@ -195,66 +221,233 @@ int mock_fprintf(FILE* const file, const char *format, ...) {
 	return return_value;
 }
 
-/** Atrapa getchar */
-int mock_getchar(void) {
-	assert_true((size_t)stdin_position < sizeof(stdin_buffer));
 
-	int r = stdin_buffer[stdin_position];
-	stdin_position++;
-	return r;
+/**
+ *  Pomocniczy bufor, z którego korzystają atrapy funkcji operujących na stdin.
+ */
+static char input_stream_buffer[256];
+static int input_stream_position = 0;
+static int input_stream_end = 0;
+int read_char_count;
+
+/**
+ * Atrapa funkcji scanf używana do przechwycenia czytania z stdin.
+ */
+int mock_scanf(const char *format, ...) {
+	va_list fmt_args;
+	int ret;
+
+	va_start(fmt_args, format);
+	ret = vsscanf(input_stream_buffer + input_stream_position, format, fmt_args);
+	va_end(fmt_args);
+
+	if (ret < 0) { /* ret == EOF */
+		input_stream_position = input_stream_end;
+	}
+	else {
+		assert_true(read_char_count >= 0);
+		input_stream_position += read_char_count;
+		if (input_stream_position > input_stream_end) {
+			input_stream_position = input_stream_end;
+		}
+	}
+	return ret;
 }
 
-/** Atrapa ungetc */
-int mock_ungetc(int __c, FILE *__stream) {
-	assert_true(stdin_position > 0);
-	stdin_position--;
-	stdin_buffer[stdin_position] = __c;
+/**
+ * Atrapa funkcji fgets używana do przechwycenia czytania z stdin.
+ */
+char *mock_fgets(char *__s, int __n, FILE *__stream) {
+	assert_true(__stream == stdin);
+
+	char *in = input_stream_buffer + input_stream_position;
+	FILE *stream = fmemopen(in, strlen(in), "r");
+	int new_line_pos = strcspn(in, "\n");
+	input_stream_position += (new_line_pos + 1);
+
+	return fgets(__s, __n, stream);
+}
+
+
+/**
+ * Atrapa funkcji getchar używana do przechwycenia czytania z stdin.
+ */
+int mock_getchar() {
+	if (input_stream_position < input_stream_end)
+		return input_stream_buffer[input_stream_position++];
+	else
+		return EOF;
+}
+
+/**
+ * Atrapa funkcji ungetc.
+ * Obsługiwane jest tylko standardowe wejście.
+ */
+int mock_ungetc(int c, FILE *stream) {
+	assert_true(stream == stdin);
+	if (input_stream_position > 0)
+		return input_stream_buffer[--input_stream_position] = c;
+	else
+		return EOF;
+}
+
+/**
+ * Funkcja inicjująca dane wejściowe dla programu korzystającego ze stdin.
+ */
+static void init_input_stream(const char *str) {
+	memset(input_stream_buffer, 0, sizeof(input_stream_buffer));
+	input_stream_position = 0;
+	input_stream_end = strlen(str);
+	assert_true((size_t)input_stream_end < sizeof(input_stream_buffer));
+	strcpy(input_stream_buffer, str);
+}
+
+/**
+ * Funkcja wołana przed każdym testem..
+ */
+static int test_setup(void **state) {
+	(void)state;
+
+	memset(fprintf_buffer, 0, sizeof(fprintf_buffer));
+	memset(printf_buffer, 0, sizeof(printf_buffer));
+	printf_position = 0;
+	fprintf_position = 0;
+
+	/* Zwrócenie zera oznacza sukces. */
 	return 0;
 }
 
-/** Atrapa fgets */
-int mock_fgets(char *__s, int __n, FILE *__stream) {
-	assert_true(__n < 256 - stdin_position);
-	int ch;
-	for (unsigned i = 0; i < __n; i++){
-		ch = stdin_buffer[stdin_position + i];
-		__s[i] = ch;
-		if (ch == '\n') {
-			__s[i + 1] = '\0';
-			break;
-		}
-	}
+/**
+ * Funkcja wołana po każdym teście.
+ */
+static int test_teardown(void **state) {
+	(void)state;
+
+
+	/* Zwrócenie zera oznacza sukces. */
+	return 0;
 }
+
 
 /** Test: brak parametru */
 static void test_no_argument(void **state) {
 	(void) state;
 
-	strcpy(stdin_buffer, "COMPOSE\n");
-	stdin_buffer[0] = 'C';
-	stdin_buffer[1] = 'O';
-	stdin_buffer[2] = 'M';
-	stdin_buffer[3] = 'P';
-	stdin_buffer[4] = 'O';
-	stdin_buffer[5] = 'S';
-	stdin_buffer[6] = 'E';
-	stdin_buffer[7] = '\n';
-	stdin_buffer[8] = EOF;
-	printf(stdin_buffer);
-	calculator_main();
-	printf(fprintf_buffer);
+	init_input_stream("COMPOSE");
+
+	assert_int_equal(mock_main(), 0);
+
 	assert_int_equal(strcmp(printf_buffer, ""), 0);
 	assert_int_equal(strcmp(fprintf_buffer, "ERROR 1 WRONG COMMAND\n"), 0);
 }
 
-/** Test: minimalna wartość, czyli 0 */
-/** Test: maksymalna wartość reprezentowana w typie unsigned */
-/** Test: wartość o jeden mniejsza od minimalnej, czyli −1 */
-/** Test: wartość o jeden większa od maksymalnej reprezentowanej w typie unsigned */
-/** Test: duża dodatnia wartość, znacznie przekraczająca zakres typu unsigned */
-/** Test: kombinacja liter */
-/** Test: kombinacja cyfr i liter, rozpoczynająca się cyfrą */
+/** Test: minimalna wartość, czyli 0, gdy na stosie nie ma wielomianu */
+static void test_compose_0_empty(void **state) {
+	(void) state;
 
+	init_input_stream("COMPOSE 0");
+
+	assert_int_equal(mock_main(), 0);
+
+	assert_int_equal(strcmp(printf_buffer, ""), 0);
+	assert_int_equal(strcmp(fprintf_buffer, "ERROR 1 STACK UNDERFLOW\n"), 0);
+}
+
+/** Test: minimalna wartość, czyli 0, gdy na stosie jest wielomian */
+static void test_compose_0_full(void **state) {
+	(void) state;
+
+	init_input_stream("(1,1)\nCOMPOSE 0\nPRINT");
+
+	assert_int_equal(mock_main(), 0);
+
+	assert_int_equal(strcmp(printf_buffer, "(1,1)\n"), 0);
+	assert_int_equal(strcmp(fprintf_buffer, ""), 0);
+}
+
+
+/** Test: maksymalna wartość reprezentowana w typie unsigned */
+static void test_compose_unsigned_max(void **state) {
+	(void) state;
+
+	char *command[30];
+	sprintf(command, "(1,1)\nCOMPOSE %lu\n", UINT32_MAX);
+	init_input_stream(command);
+
+	assert_int_equal(mock_main(), 0);
+
+	assert_int_equal(strcmp(printf_buffer, ""), 0);
+	assert_int_equal(strcmp(fprintf_buffer, "ERROR 2 STACK UNDERFLOW\n"), 0);
+}
+
+/** Test: wartość o jeden mniejsza od minimalnej, czyli −1 */
+static void test_compose_unsigned_max_minus_1(void **state) {
+	(void) state;
+
+	char *command[30];
+	sprintf(command, "(1,1)\nCOMPOSE %lu\n", UINT_MAX - 1);
+	init_input_stream(command);
+
+	assert_int_equal(mock_main(), 0);
+
+	assert_int_equal(strcmp(printf_buffer, ""), 0);
+	assert_int_equal(strcmp(fprintf_buffer, "ERROR 2 STACK UNDERFLOW\n"), 0);
+}
+
+/** Test: wartość o jeden większa od maksymalnej reprezentowanej w typie unsigned */
+static void test_compose_unsigned_max_plus_1(void **state) {
+	(void) state;
+
+	char *command[30];
+	sprintf(command, "(1,1)\nCOMPOSE %lu\n", ((long) UINT_MAX) + 1);
+	init_input_stream(command);
+
+	assert_int_equal(mock_main(), 0);
+
+	assert_int_equal(strcmp(printf_buffer, ""), 0);
+	assert_int_equal(strcmp(fprintf_buffer, "ERROR 2 STACK UNDERFLOW\n"), 0);
+}
+
+/** Test: duża dodatnia wartość, znacznie przekraczająca zakres typu unsigned */
+static void test_compose_big_int(void **state) {
+	(void) state;
+
+	char *command[30];
+	sprintf(command, "(1,1)\nCOMPOSE 20000%d\n", UINT_MAX);
+	init_input_stream(command);
+
+	assert_int_equal(mock_main(), 0);
+
+	assert_int_equal(strcmp(printf_buffer, ""), 0);
+	/* Wyjaśnienie: program akceptuje jedynie komendy do 25 znaków.
+	 * komendy o większej liczbie znaków są traktowane od razu
+	 * jako błędne i niebadane pod kątem zawierania liczby.*/
+	assert_int_equal(strcmp(fprintf_buffer, "ERROR 2 WRONG COUNT\n"), 0);
+}
+
+/** Test: kombinacja liter */
+static void test_compose_letters(void **state) {
+	(void) state;
+
+	init_input_stream("(1,1)\nCOMPOSE bc\n");
+
+	assert_int_equal(mock_main(), 0);
+
+	assert_int_equal(strcmp(printf_buffer, ""), 0);
+	assert_int_equal(strcmp(fprintf_buffer, "ERROR 2 WRONG COUNT\n"), 0);
+}
+
+/** Test: kombinacja cyfr i liter, rozpoczynająca się cyfrą */
+static void test_compose_digits_and_letters(void **state) {
+	(void) state;
+
+	init_input_stream("(1,1)\nCOMPOSE 7bc\n");
+
+	assert_int_equal(mock_main(), 0);
+
+	assert_int_equal(strcmp(printf_buffer, ""), 0);
+	assert_int_equal(strcmp(fprintf_buffer, "ERROR 2 WRONG COUNT\n"), 0);
+}
 
 int main(void) {
 	const struct CMUnitTest tests_poly[] = {
@@ -268,7 +461,15 @@ int main(void) {
 	};
 
 	const struct CMUnitTest tests_parser[] = {
-		cmocka_unit_test(test_no_argument)
+		cmocka_unit_test_setup_teardown(test_no_argument, test_setup, test_teardown),
+		cmocka_unit_test_setup_teardown(test_compose_0_empty, test_setup, test_teardown),
+		cmocka_unit_test_setup_teardown(test_compose_0_full, test_setup, test_teardown),
+		cmocka_unit_test_setup_teardown(test_compose_unsigned_max, test_setup, test_teardown),
+		cmocka_unit_test_setup_teardown(test_compose_unsigned_max_minus_1, test_setup, test_teardown),
+		cmocka_unit_test_setup_teardown(test_compose_unsigned_max_plus_1, test_setup, test_teardown),
+		cmocka_unit_test_setup_teardown(test_compose_big_int, test_setup, test_teardown),
+		cmocka_unit_test_setup_teardown(test_compose_letters, test_setup, test_teardown),
+		cmocka_unit_test_setup_teardown(test_compose_digits_and_letters, test_setup, test_teardown)
 	};
 
 	int r = cmocka_run_group_tests(tests_poly, NULL, NULL);

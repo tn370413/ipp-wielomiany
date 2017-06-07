@@ -37,16 +37,17 @@ enum error_flag_e {
     WRONG_VALUE_ERR_FLAG,
     WRONG_VARIABLE_ERR_FLAG,
     EXCEEDED_COMMAND_BUF_ERR,
-    WRONG_COUNT_ERR_FLAG
+	WRONG_COUNT_ERR_FLAG,
+	TOO_BIG_NUMBER_ERR_FLAG
 };
 
 /* * * PARSER STATE AND ERROR HANDLING * * */
 
 /* These variables will hold the state of the whole parser */
-unsigned row = 0; ///< numer wiersza na którym jest parser (licząc od 0)
-unsigned column = 0; ///< numer kolumny na której jest parser
-enum error_flag_e error_flag = NO_ERROR; ///< flaga ostatnio wykrytego i nieobsłużoneo błędu
-bool end_of_line = false; ///< flaga wskazująca osiągnięcie końca wiersza
+static unsigned row = 0; ///< numer wiersza na którym jest parser (licząc od 0)
+static unsigned column = 0; ///< numer kolumny na której jest parser
+static enum error_flag_e error_flag = NO_ERROR; ///< flaga ostatnio wykrytego i nieobsłużoneo błędu
+static bool end_of_line = false; ///< flaga wskazująca osiągnięcie końca wiersza
 
 /* Dummy structs for quick escape from functions on error */
 Poly DUMMY_POLY; ///< stała zwracana przez funkcje typu Poly w trakcie ucieczki z błędu
@@ -278,8 +279,8 @@ Poly PolyParse();
  */
 void ValidateNextDigit(long r, int digit, bool minus, long max_val) {
 	if (r > max_val / 10 ||
-			(r == max_val / 10 && digit > (max_val % 10) + minus)) {
-		ErrorSetFlag(PARSING_ERR_FLAG);
+			(r == max_val / 10 && digit >= (max_val % 10) + minus)) {
+		ErrorSetFlag(TOO_BIG_NUMBER_ERR_FLAG);
 	}
 }
 
@@ -631,6 +632,10 @@ void ComposePolysOnStack(Stack *s, unsigned count) {
 		ErrorSetFlag(UNDERFLOW_ERR_FLAG);
 		return;
 	}
+
+	if (count == 0) {
+		return;
+	}
 	
 	Poly p = Pop(s);
 	Poly x[count];
@@ -731,7 +736,10 @@ void ExecuteCommand(Stack *s, char *command) {
 		}
 
 		unsigned arg = NumberRead(command + 8, UNSIGNED);
-		if (Error()) {
+		if (Error() == TOO_BIG_NUMBER_ERR_FLAG) {
+			ErrorSetFlag(UNDERFLOW_ERR_FLAG);
+			return;
+		} else if (Error()) {
 			ErrorSetFlag(WRONG_COUNT_ERR_FLAG);
 			return;
 		}
@@ -774,6 +782,8 @@ void ExecuteCommand(Stack *s, char *command) {
  */
 int main() {
 	Stack s = StackEmpty();
+	row = 0;
+	error_flag = NO_ERROR;
 
 	char command_buf[MAX_COMMAND_LENGTH] = {'\0'};
 	size_t new_line_pos;
@@ -783,20 +793,13 @@ int main() {
 	while (!eof_flag) {
 		end_of_line = false;
 		column = 0;
-
 		ch = SeeChar();
-
-		printf("AA: ");
-
-		int chs[5] = {ch, '=', '\n', '\0'};
-
-		printf(&chs);
-
 
 		if (ch == EOF) {
 			break;
 		} else if (IsLetter(ch)) { /* komenda */
 			/* komendy możemy trzymać w buforze o ograniczonej pojemności */
+			//scanf("%s", command_buf);
 			fgets(command_buf, sizeof command_buf, stdin);
 
 			new_line_pos = strcspn(command_buf, "\r\n");

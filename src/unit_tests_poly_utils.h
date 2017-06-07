@@ -24,13 +24,22 @@
 
 #include <stdio.h>
 
+
+/* Redirect exit to a function in the test application so it's possible to
+ * catch program ending. */
+#ifdef exit
+#undef exit
+#endif /* exit */
+#define exit(status) mock_exit(status)
+extern void mock_exit(int status);
+
 /* Redirect printf to a function in the test application so it's possible to
- * test the standard output. *//*
+ * test the standard output. */
 #ifdef printf
 #undef printf
-#endif  printf
+#endif /* printf */
 #define printf(...) mock_printf(__VA_ARGS__)
-extern int mock_printf(const char *format, ...); */
+extern int mock_printf(const char *format, ...);
 
 /* Redirect fprintf to a function in the test application so it's possible to
  * test error messages. */
@@ -40,23 +49,39 @@ extern int mock_printf(const char *format, ...); */
 #define fprintf(...) mock_fprintf(__VA_ARGS__)
 extern int mock_fprintf(FILE * const file, const char *format, ...);
 
+/* Redirect scanf to a function in the test application so it's possible to
+ * test the standard input. */
+#ifdef scanf
+#undef scanf
+#endif /* scanf */
+#define scanf(format, ...) mock_scanf(format"%n", ##__VA_ARGS__, &read_char_count)
+extern int read_char_count;
+extern int mock_scanf(const char *format, ...);
+
+/* Redirect fgets to a function in the test application so it's possible to
+ * test the standard input. */
+#ifdef fgets
+#undef fgets
+#endif
+#define fgets(s, n, stream) mock_fgets(s, n, stream)
+extern char *fgets(char *__s, int __n, FILE *__stream);
+
+
+/* Redirect getchar to a function in the test application so it's possible to
+ * test the standard input. */
 #ifdef getchar
 #undef getchar
 #endif /* getchar */
-#define getchar(...) mock_getchar(__VA_ARGS__)
-extern int mock_getchar(void);
+#define getchar() mock_getchar()
+extern int mock_getchar();
 
+/* Redirect ungetc to a function in the test application so it's possible to
+ * test the standard input. */
 #ifdef ungetc
 #undef ungetc
 #endif /* ungetc */
-#define ungetc(...) mock_ungetc(__VA_ARGS__)
-extern int mock_ungetc(int __c, FILE *__stream);
-
-#ifdef fgets
-#undef fgets
-#endif /* fgets */
-#define fgets(...) mock_fgets(__VA_ARGS__)
-extern int mock_fgets(char *__s, int __n, FILE *__stream);
+#define ungetc(c, stream) mock_ungetc(c, stream)
+extern int mock_ungetc(int c, FILE *stream);
 
 /* Redirect assert to mock_assert() so assertions can be caught by cmocka. */
 #ifdef assert
