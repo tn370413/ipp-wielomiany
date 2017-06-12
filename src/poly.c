@@ -151,8 +151,8 @@ void PolyDestroy(Poly *p) {
  */
 Poly PolyClone(const Poly *p){
 	if (PolyIsCoeff(p)) {
-	    return *p;
-    }
+		return *p;
+	}
 	Poly r;
 	r.scalar = p->scalar;
 	r.monos_count = p->monos_count;
@@ -241,9 +241,9 @@ Poly PolyAdd(const Poly *p, const Poly *q) {
 				 * Wtedy powstaje jednomian zerowy który należy odrzucić
 				 */
 				if (!(PolyIsZero(&m_coeff))) {
-				    InsertNthMono(r.monos, r.monos_count,
+					InsertNthMono(r.monos, r.monos_count,
 							  MonoFromPoly(&m_coeff, pm->exp));
-				    r.monos_count++;
+					r.monos_count++;
 				}
 
 				i++;
@@ -264,8 +264,8 @@ Poly PolyAdd(const Poly *p, const Poly *q) {
 	}
 	
 	if (PolyIsCoeff(&r)) {
-	    free(r.monos);
-    }
+		free(r.monos);
+	}
 
 	return r;
 }
@@ -327,10 +327,10 @@ Poly PolyAddMonos(unsigned count, const Mono *monos){
 		}
 	}
 
-    if (PolyIsCoeff(&r)) {
-        free(r.monos);
-        return r;
-    }
+	if (PolyIsCoeff(&r)) {
+		free(r.monos);
+		return r;
+	}
 
 	/* Lista wejściowa mogła być nieposortowana. Trzeba więc wynik posortować */
 	// SortMonosByExp(r.monos, r.monos_count);
@@ -714,7 +714,7 @@ Poly MonoCompose(const Mono *m, unsigned count, const Poly x[]) {
  */
 Poly PolyCompose(const Poly *p, unsigned count, const Poly x[]) {
 	if (count == 0) {
-		return PolyClone(p);
+		return PolyFromCoeff(p->scalar);
 	}
 
 	Poly r = PolyFromCoeff(p->scalar);

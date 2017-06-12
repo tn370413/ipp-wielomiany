@@ -102,7 +102,7 @@ static inline bool IsEmpty(Stack *s) {
 }
 
 /**
- * Sprawdza, czy na stosie jest co najmniej @count elementów.
+ * Sprawdza, czy na stosie jest co najmniej `count` elementów.
  * @param[in] s : stos
  * @param[in] count : oczekiwana liczba elementów
  * @return Na stosie jest co najmniej count elementów

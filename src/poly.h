@@ -17,11 +17,11 @@
 
 /** Typ współczynników wielomianu */
 typedef int64_t poly_coeff_t;
-#define POLY_COEFF_MAX INT64_MAX
+#define POLY_COEFF_MAX INT64_MAX ///< maxymalna wartosc poly_coeff_t
 
 /** Typ wykładników wielomianu */
 typedef int32_t poly_exp_t;
-#define POLY_EXP_MAX INT32_MAX
+#define POLY_EXP_MAX INT32_MAX ///< maxymalna wartosc poly_exp_t
 
 /** Struktura przechowująca wielomian */
 typedef struct Poly

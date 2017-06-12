@@ -24,9 +24,12 @@
 
 #include "poly.h"
 
+/**
+  * oblicza wielkość tablicy w jednostce rozmiaru pojedynczego elementu zamiast w bajtach
+  */
 #define array_length(x) (sizeof(x) / sizeof((x)[0]))
 
-extern int calculator_main();
+extern int calculator_main(); ///< umożliwia używanie main'a z głównego pliku
 
 /* * * TESTY FUNKCJI PolyCompose * * */
 
@@ -102,7 +105,7 @@ static void test_poly_x(void **state) {
 
 	Poly p = poly_x0();
 	Poly r = PolyCompose(&p, 0, NULL);
-	Poly expected = poly_x0();
+	Poly expected = PolyZero();
 
 	assert_true(PolyIsEq(&r, &expected));
 	PolyDestroy(&p);
@@ -147,8 +150,8 @@ static void test_poly_x_compose_x(void **state) {
 /* * * TESTY PARSERA * * */
 
 
-static jmp_buf jmp_at_exit;
-static int exit_status;
+static jmp_buf jmp_at_exit; ///< pozwala przywrócić stan środowiska po wywołaniu głównego maina
+static int exit_status; ///< wartość zwracana przez main po wykonaniu
 
 
 /**
@@ -170,14 +173,16 @@ void mock_exit(int status) {
 
 
 /* Pomocnicze bufory, do których piszą atrapy funkcji printf i fprintf oraz
-pozycje zapisu w tych buforach. Pozycja zapisu wskazuje bajt o wartości 0. TODO*/
-static char fprintf_buffer[256];
-static char printf_buffer[256];
-static int fprintf_position = 0;
-static int printf_position = 0;
+pozycje zapisu w tych buforach. Pozycja zapisu wskazuje bajt o wartości 0. */
+static char fprintf_buffer[256]; ///< bufer pseudo wyjścia błędu
+static char printf_buffer[256]; ///< bufer pseudo wyjścia stdout
+static int fprintf_position = 0; ///< aktualna pozycja na pseudobuf. błędu
+static int printf_position = 0; ///< aktualna pozycja na pseudobuf. stdout
 
 
-/* Atrapa funkcji printf TODO */
+/**
+ * Atrapa funkcji printf
+ */
 int mock_printf(const char *format, ...) {
 	int return_value;
 	va_list args;
@@ -198,10 +203,16 @@ int mock_printf(const char *format, ...) {
 	return return_value;
 }
 
-/* Atrapa funkcji fprintf TODO */
+/**
+ * Atrapa funkcji fprintf
+ */
 int mock_fprintf(FILE* const file, const char *format, ...) {
 	int return_value;
 	va_list args;
+
+	if (file == stdout) {
+		return mock_printf(format, args);
+	}
 
 	assert_true(file == stderr);
 	/* Poniższa asercja sprawdza też, czy fprintf_position jest nieujemne.
@@ -216,19 +227,18 @@ int mock_fprintf(FILE* const file, const char *format, ...) {
 	va_end(args);
 
 	fprintf_position += return_value;
-	printf(format);
 	assert_true((size_t)fprintf_position < sizeof(fprintf_buffer));
 	return return_value;
 }
 
 
-/**
+/*
  *  Pomocniczy bufor, z którego korzystają atrapy funkcji operujących na stdin.
  */
-static char input_stream_buffer[256];
-static int input_stream_position = 0;
-static int input_stream_end = 0;
-int read_char_count;
+static char input_stream_buffer[256]; ///< pseudobufor wejścia
+static int input_stream_position = 0; ///< pozycja na pseudobuf. wejścia
+static int input_stream_end = 0; ///< liczba wskazująca gdzie kończy się pseudowejście
+int read_char_count; ///< licznik wczytanych z pseudowejścia znaków
 
 /**
  * Atrapa funkcji scanf używana do przechwycenia czytania z stdin.
@@ -303,7 +313,7 @@ static void init_input_stream(const char *str) {
 }
 
 /**
- * Funkcja wołana przed każdym testem..
+ * Funkcja wołana przed każdym testem.
  */
 static int test_setup(void **state) {
 	(void)state;
@@ -338,7 +348,7 @@ static void test_no_argument(void **state) {
 	assert_int_equal(mock_main(), 0);
 
 	assert_int_equal(strcmp(printf_buffer, ""), 0);
-	assert_int_equal(strcmp(fprintf_buffer, "ERROR 1 WRONG COMMAND\n"), 0);
+	assert_int_equal(strcmp(fprintf_buffer, "ERROR 1 WRONG COUNT\n"), 0);
 }
 
 /** Test: minimalna wartość, czyli 0, gdy na stosie nie ma wielomianu */
@@ -361,7 +371,7 @@ static void test_compose_0_full(void **state) {
 
 	assert_int_equal(mock_main(), 0);
 
-	assert_int_equal(strcmp(printf_buffer, "(1,1)\n"), 0);
+	assert_int_equal(strcmp(printf_buffer, "0\n"), 0);
 	assert_int_equal(strcmp(fprintf_buffer, ""), 0);
 }
 
@@ -370,8 +380,8 @@ static void test_compose_0_full(void **state) {
 static void test_compose_unsigned_max(void **state) {
 	(void) state;
 
-	char *command[30];
-	sprintf(command, "(1,1)\nCOMPOSE %lu\n", UINT32_MAX);
+	char command[30];
+	sprintf(command, "(1,1)\nCOMPOSE %lu\n", (long unsigned) UINT_MAX);
 	init_input_stream(command);
 
 	assert_int_equal(mock_main(), 0);
@@ -384,8 +394,8 @@ static void test_compose_unsigned_max(void **state) {
 static void test_compose_unsigned_max_minus_1(void **state) {
 	(void) state;
 
-	char *command[30];
-	sprintf(command, "(1,1)\nCOMPOSE %lu\n", UINT_MAX - 1);
+	char command[30];
+	sprintf(command, "(1,1)\nCOMPOSE %lu\n",(long unsigned) UINT_MAX - 1);
 	init_input_stream(command);
 
 	assert_int_equal(mock_main(), 0);
@@ -398,21 +408,21 @@ static void test_compose_unsigned_max_minus_1(void **state) {
 static void test_compose_unsigned_max_plus_1(void **state) {
 	(void) state;
 
-	char *command[30];
-	sprintf(command, "(1,1)\nCOMPOSE %lu\n", ((long) UINT_MAX) + 1);
+	char command[30];
+	sprintf(command, "(1,1)\nCOMPOSE %lu\n", ((unsigned long) UINT_MAX) + 1);
 	init_input_stream(command);
 
 	assert_int_equal(mock_main(), 0);
 
 	assert_int_equal(strcmp(printf_buffer, ""), 0);
-	assert_int_equal(strcmp(fprintf_buffer, "ERROR 2 STACK UNDERFLOW\n"), 0);
+	assert_int_equal(strcmp(fprintf_buffer, "ERROR 2 WRONG COUNT\n"), 0);
 }
 
 /** Test: duża dodatnia wartość, znacznie przekraczająca zakres typu unsigned */
 static void test_compose_big_int(void **state) {
 	(void) state;
 
-	char *command[30];
+	char command[30];
 	sprintf(command, "(1,1)\nCOMPOSE 20000%d\n", UINT_MAX);
 	init_input_stream(command);
 
@@ -449,6 +459,10 @@ static void test_compose_digits_and_letters(void **state) {
 	assert_int_equal(strcmp(fprintf_buffer, "ERROR 2 WRONG COUNT\n"), 0);
 }
 
+/**
+ * Główna funkcja tetsująca
+ * @return sumaryczny wynik testów (>0 = źle)
+ */
 int main(void) {
 	const struct CMUnitTest tests_poly[] = {
 		cmocka_unit_test(test_poly_zero),
@@ -463,7 +477,7 @@ int main(void) {
 	const struct CMUnitTest tests_parser[] = {
 		cmocka_unit_test_setup_teardown(test_no_argument, test_setup, test_teardown),
 		cmocka_unit_test_setup_teardown(test_compose_0_empty, test_setup, test_teardown),
-//		cmocka_unit_test_setup_teardown(test_compose_0_full, test_setup, test_teardown),
+		cmocka_unit_test_setup_teardown(test_compose_0_full, test_setup, test_teardown),
 		cmocka_unit_test_setup_teardown(test_compose_unsigned_max, test_setup, test_teardown),
 		cmocka_unit_test_setup_teardown(test_compose_unsigned_max_minus_1, test_setup, test_teardown),
 		cmocka_unit_test_setup_teardown(test_compose_unsigned_max_plus_1, test_setup, test_teardown),

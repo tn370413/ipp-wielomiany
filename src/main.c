@@ -11,6 +11,8 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <string.h>
+#include <ctype.h>
+#include <limits.h>
 
 #include "poly.h"
 #include "stack.h"
@@ -18,25 +20,25 @@
 #include "unit_tests_poly_utils.h"
 
 #define INITIAL_MONOS_SIZE 256 ///< początkowy rozmiar tablicy monosów dla PolyAddMonos w PolyParse
-#define MAX_COMMAND_LENGTH 25 ///< maksymalna długość komendy ("AT -LONG_MAX\n")
+#define MAX_COMMAND_LENGTH 255 ///< wielkość bufora komendy, jeżeli to zostanie przekroczone to coś poszło horribly wrong
 
 /** Flagi oznaczające typy liczbowe dla funkcji parsujących liczby */
 enum int_type_e {
-    POLY_EXP_T,
-    POLY_COEFF_T,
-    UNSIGNED
+	POLY_EXP_T,
+	POLY_COEFF_T,
+	UNSIGNED
 };
 
 /** Flagi błędów */
 enum error_flag_e {
 	NO_ERROR,
-    EOF_FLAG,
-    UNDERFLOW_ERR_FLAG,
-    PARSING_ERR_FLAG,
-    WRONG_COMMAND_ERR_FLAG,
-    WRONG_VALUE_ERR_FLAG,
-    WRONG_VARIABLE_ERR_FLAG,
-    EXCEEDED_COMMAND_BUF_ERR,
+	EOF_FLAG,
+	UNDERFLOW_ERR_FLAG,
+	PARSING_ERR_FLAG,
+	WRONG_COMMAND_ERR_FLAG,
+	WRONG_VALUE_ERR_FLAG,
+	WRONG_VARIABLE_ERR_FLAG,
+	EXCEEDED_COMMAND_BUF_ERR,
 	WRONG_COUNT_ERR_FLAG,
 	TOO_BIG_NUMBER_ERR_FLAG
 };
@@ -216,25 +218,6 @@ int GetChar() {
 }
 
 /**
- * Sprawdza czy znak jest literą
- * @param[in] ch : znak
- * @return Czy znak jest literą?
- */
-bool IsLetter(int ch) {
-	return ('a' <= ch && ch <= 'z') || ('A' <= ch && ch <= 'Z');
-}
-
-/**
- * Sprawdza czy znak jest cyfrą
- * @param[in] ch : znak
- * @param[in] exclude_minus : informuje czy dopuszczać znak minus?
- * @return Czy znak jest cyfrą?
- */
-bool IsDigit(int ch, bool exclude_minus) {
-	return ('0' <= ch && ch <= '9') || (!exclude_minus && (ch == '-'));
-}
-
-/**
  * Przewija stdin do następnej linii.
  * @param[in] eof_flag : informuje fukcję wywołującą, czy napotkano End Of File
  */
@@ -276,12 +259,22 @@ Poly PolyParse();
  * @param[in] r : liczba
  * @param[in] digit : doklejana cyfra
  * @param[in] max_val : limit
+ * @param[in] minus : określa czy badana liczba jest ujemna
  */
 void ValidateNextDigit(long r, int digit, bool minus, long max_val) {
 	if (r > max_val / 10 ||
-			(r == max_val / 10 && digit >= (max_val % 10) + minus)) {
+			(r == max_val / 10 && digit > (max_val % 10) + minus)) {
 		ErrorSetFlag(TOO_BIG_NUMBER_ERR_FLAG);
 	}
+}
+
+/**
+ * Sprawdza, czy znak jest liczbą, bądź minusem
+ * @param[in] ch : znak
+ * @return : Czy znak jest liczbą lub minusem?
+ */
+bool IsDigitOrMinus(int ch) {
+	return isdigit(ch) || ch == '-';
 }
 
 /**
@@ -291,8 +284,8 @@ void ValidateNextDigit(long r, int digit, bool minus, long max_val) {
  * @return wczytana liczba
  */
 long NumberRead(char *c, enum int_type_e type) {
-	if ((c && !IsDigit(c[0], false)) ||
-	   (!c && !IsDigit(SeeChar(), false))) {
+	if ((c && !IsDigitOrMinus(c[0])) ||
+	   (!c && !IsDigitOrMinus(SeeChar()))) {
 		if (!c) { GetChar(); }
 		ErrorSetFlag(PARSING_ERR_FLAG);
 		return 0;
@@ -323,7 +316,7 @@ long NumberRead(char *c, enum int_type_e type) {
 	}
 	int digit;
 	long r = 0;
-	while (IsDigit(ch, true)) {
+	while (isdigit(ch)) {
 		if (c) {
 			c++;
 		} else {
@@ -394,7 +387,7 @@ Mono MonoParse() {
 	}
 
 	int ch = SeeChar();
-	if (!IsDigit(ch, false)) {
+	if (!IsDigitOrMinus(ch)) {
 		GetChar();
 		ErrorSetFlag(PARSING_ERR_FLAG);
 		return DUMMY_MONO;
@@ -628,19 +621,25 @@ void PrintPolyOnStack(Stack *s) {
  * @param[in] count : liczba wielomianów do zmielenia
 */
 void ComposePolysOnStack(Stack *s, unsigned count) {
-	if (!HasElements(s, count + 1)) {
+	if (!HasElements(s, 1)) {
 		ErrorSetFlag(UNDERFLOW_ERR_FLAG);
 		return;
 	}
 
-	if (count == 0) {
+	Poly p = Pop(s);
+
+	if (!HasElements(s, count)) {
+		ErrorSetFlag(UNDERFLOW_ERR_FLAG);
+		Push(s, &p);
 		return;
 	}
-	
-	Poly p = Pop(s);
+
 	Poly x[count];
 	for (unsigned i = 0; i < count; i++) {
 		x[i] = Pop(s);
+		if (i == UINT_MAX) {
+			break;
+		}
 	}
 	Poly r = PolyCompose(&p, count, x);
 	Push(s, &r);
@@ -648,6 +647,9 @@ void ComposePolysOnStack(Stack *s, unsigned count) {
 	PolyDestroy(&p);
 	for (unsigned i = 0; i < count; i++) {
 		PolyDestroy(&(x[i]));
+		if (i == UINT_MAX) {
+			break;
+		}
 	}
 }
 
@@ -729,24 +731,21 @@ void ExecuteCommand(Stack *s, char *command) {
 		PolyDestroy(&p);
 		
 	
-	} else if (strncmp(command, "COMPOSE ", 8) == 0) {
-		if (Error() == EXCEEDED_COMMAND_BUF_ERR) {
+	} else if (strncmp(command, "COMPOSE", 7) == 0) {
+		if (Error() == EXCEEDED_COMMAND_BUF_ERR || command[7] != ' ') {
 			ErrorSetFlag(WRONG_COUNT_ERR_FLAG);
 			return;
 		}
 
 		unsigned arg = NumberRead(command + 8, UNSIGNED);
-		if (Error() == TOO_BIG_NUMBER_ERR_FLAG) {
-			ErrorSetFlag(UNDERFLOW_ERR_FLAG);
-			return;
-		} else if (Error()) {
+		if (Error()) {
 			ErrorSetFlag(WRONG_COUNT_ERR_FLAG);
 			return;
 		}
 		ComposePolysOnStack(s, arg);
 
-	} else if (strncmp(command, "DEG_BY ", 7) == 0) {
-		if (Error() == EXCEEDED_COMMAND_BUF_ERR) {
+	} else if (strncmp(command, "DEG_BY", 6) == 0) {
+		if (Error() == EXCEEDED_COMMAND_BUF_ERR || command[6] != ' ') {
 			ErrorSetFlag(WRONG_VARIABLE_ERR_FLAG);
 			return;
 		}
@@ -758,8 +757,8 @@ void ExecuteCommand(Stack *s, char *command) {
 		}
 		PrintDegBy(s, arg);
 
-	} else if (strncmp(command, "AT ", 3) == 0) {
-		if (Error() == EXCEEDED_COMMAND_BUF_ERR) {
+	} else if (strncmp(command, "AT", 2) == 0) {
+		if (Error() == EXCEEDED_COMMAND_BUF_ERR || command[2] != ' ') {
 			ErrorSetFlag(WRONG_VALUE_ERR_FLAG);
 			return;
 		}
@@ -797,7 +796,7 @@ int main() {
 
 		if (ch == EOF) {
 			break;
-		} else if (IsLetter(ch)) { /* komenda */
+		} else if (isalpha(ch)) { /* komenda */
 			/* komendy możemy trzymać w buforze o ograniczonej pojemności */
 			//scanf("%s", command_buf);
 			fgets(command_buf, sizeof command_buf, stdin);
