@@ -86,6 +86,7 @@ void ErrorHandle() {
 		fprintf(stderr, "ERROR %d STACK UNDERFLOW\n", row + 1);
 		break;
 	case PARSING_ERR_FLAG:
+	case TOO_BIG_NUMBER_ERR_FLAG:
 		fprintf(stderr, "ERROR %d %d\n", row + 1, column);
 		break;
 	case WRONG_COMMAND_ERR_FLAG:
@@ -379,10 +380,14 @@ Mono MonoParse() {
 	}
 
 	Poly p = PolyParse();
-	if (Error()) { return DUMMY_MONO; }
+	if (Error()) {
+		PolyDestroy(&p);
+		return DUMMY_MONO;
+	}
 
 	if (GetChar() != ',') {
 		ErrorSetFlag(PARSING_ERR_FLAG);
+		PolyDestroy(&p);
 		return DUMMY_MONO;
 	}
 
@@ -390,14 +395,19 @@ Mono MonoParse() {
 	if (!IsDigitOrMinus(ch)) {
 		GetChar();
 		ErrorSetFlag(PARSING_ERR_FLAG);
+		PolyDestroy(&p);
 		return DUMMY_MONO;
 	}
 
 	poly_exp_t e = NumberParse(POLY_EXP_T);
-	if (Error()) { return DUMMY_MONO; }
+	if (Error()) {
+		PolyDestroy(&p);
+		return DUMMY_MONO;
+	}
 
 	if (GetChar() != ')') {
 		ErrorSetFlag(PARSING_ERR_FLAG);
+		PolyDestroy(&p);
 		return DUMMY_MONO;
 	}
 
@@ -411,7 +421,7 @@ Poly PolyParse() {
 		size_t monos_size = INITIAL_MONOS_SIZE;
 		Mono *monos = calloc(monos_size, sizeof(Mono));
 		assert(monos != NULL);
-		unsigned monos_count = 0;
+		size_t monos_count = 0;
 
 		int c;
 		while (true) {
@@ -752,7 +762,7 @@ void ExecuteCommand(Stack *s, char *command) {
 
 		unsigned arg = NumberRead(command + 7, UNSIGNED);
 		if (Error()) {
-			ErrorSetFlag(WRONG_COUNT_ERR_FLAG);
+			ErrorSetFlag(WRONG_VARIABLE_ERR_FLAG);
 			return;
 		}
 		PrintDegBy(s, arg);
@@ -828,6 +838,7 @@ int main() {
 			if (!(Error())) {
 				Push(&s, &p);
 			} else {
+				PolyDestroy(&p);
 				ErrorHandle();
 			}
 		}

@@ -278,13 +278,6 @@ Poly PolyAdd(const Poly *p, const Poly *q) {
  * @return wielomian będący sumą jednomianów
  */
 Poly PolyAddMonos(unsigned count, const Mono *monos){
-	/**
-	 * Uwaga. Przyjęto założenie, że jednomiany mają różne wykładniki. Jeżeli
-	 * będą dwa z takim samym, w większości przypadków operacje na wielomianach
-	 * będą działać normalnie, ale taka konstrukcja nie będzie działać np.
-	 * przy PolyIsEq. Założenie wynika z tego, ze w momencie pisania tego
-	 * komentarza jest juz sobota 13 maja.
-	 */ /* TODO */
 	Poly r;
 	r.scalar = 0;
 	r.monos_count = 0;

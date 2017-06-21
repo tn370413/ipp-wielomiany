@@ -13,6 +13,8 @@
    @date 2017-06-06
 */
 
+#define _GNU_SOURCE
+
 #include <stdio.h>
 #include <stdarg.h>
 #include <setjmp.h>
@@ -351,18 +353,6 @@ static void test_no_argument(void **state) {
 	assert_int_equal(strcmp(fprintf_buffer, "ERROR 1 WRONG COUNT\n"), 0);
 }
 
-/** Test: minimalna wartość, czyli 0, gdy na stosie nie ma wielomianu */
-static void test_compose_0_empty(void **state) {
-	(void) state;
-
-	init_input_stream("COMPOSE 0");
-
-	assert_int_equal(mock_main(), 0);
-
-	assert_int_equal(strcmp(printf_buffer, ""), 0);
-	assert_int_equal(strcmp(fprintf_buffer, "ERROR 1 STACK UNDERFLOW\n"), 0);
-}
-
 /** Test: minimalna wartość, czyli 0, gdy na stosie jest wielomian */
 static void test_compose_0_full(void **state) {
 	(void) state;
@@ -476,7 +466,6 @@ int main(void) {
 
 	const struct CMUnitTest tests_parser[] = {
 		cmocka_unit_test_setup_teardown(test_no_argument, test_setup, test_teardown),
-		cmocka_unit_test_setup_teardown(test_compose_0_empty, test_setup, test_teardown),
 		cmocka_unit_test_setup_teardown(test_compose_0_full, test_setup, test_teardown),
 		cmocka_unit_test_setup_teardown(test_compose_unsigned_max, test_setup, test_teardown),
 		cmocka_unit_test_setup_teardown(test_compose_unsigned_max_minus_1, test_setup, test_teardown),
