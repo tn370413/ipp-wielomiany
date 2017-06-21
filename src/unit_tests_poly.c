@@ -13,7 +13,7 @@
    @date 2017-06-06
 */
 
-#define _GNU_SOURCE
+#define _GNU_SOURCE ///< umożliwia użycie 'fmemopen'
 
 #include <stdio.h>
 #include <stdarg.h>
