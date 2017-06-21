@@ -309,10 +309,13 @@ Poly PolyAddMonos(unsigned count, const Mono *monos){
 
 		if (PolyIsCoeff(&(mptr->p)) && mptr->exp == 0) {
 			r.scalar += mptr->p.scalar;
+
 		} else if (k > 0 && mptr->exp == r.monos[k - 1].exp) {
 			Poly m_coeff = PolyAdd(&(mptr->p), &(r.monos[k - 1].p));
 			PolyDestroy(&(r.monos[k - 1].p));
+			PolyDestroy(&(mptr->p));
 			r.monos[k - 1].p = m_coeff;
+
 		} else {
 			r.monos[k] = *mptr;
 			r.monos_count++;
@@ -326,7 +329,6 @@ Poly PolyAddMonos(unsigned count, const Mono *monos){
 	}
 
 	/* Lista wejściowa mogła być nieposortowana. Trzeba więc wynik posortować */
-	// SortMonosByExp(r.monos, r.monos_count);
 	SimplifyPoly(&r);
 	return r;
 }

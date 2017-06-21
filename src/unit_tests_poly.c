@@ -335,7 +335,6 @@ static int test_setup(void **state) {
 static int test_teardown(void **state) {
 	(void)state;
 
-
 	/* Zwrócenie zera oznacza sukces. */
 	return 0;
 }
@@ -450,7 +449,7 @@ static void test_compose_digits_and_letters(void **state) {
 }
 
 /**
- * Główna funkcja tetsująca
+ * Główna funkcja testująca
  * @return sumaryczny wynik testów (>0 = źle)
  */
 int main(void) {
