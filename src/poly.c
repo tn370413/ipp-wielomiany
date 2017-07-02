@@ -262,7 +262,7 @@ Poly PolyAdd(const Poly *p, const Poly *q) {
 			}
 		}
 	}
-	
+
 	if (PolyIsCoeff(&r)) {
 		free(r.monos);
 	}
@@ -422,11 +422,16 @@ Poly PolyMul(const Poly *p, const Poly *q) {
 	r3.monos = (Mono *) calloc(r3.monos_count, sizeof(Mono));
 	assert(r3.monos != NULL);
 
+	unsigned counter = 0;
 	for (unsigned i = 0; i < p->monos_count; i++) {
 		for (unsigned j = 0; j < q->monos_count; j++) {
 			Mono *mp = &(p->monos[i]);
 			Mono *mq = &(q->monos[j]);
-			InsertNthMono(r3.monos, j + q->monos_count * i, MonoMul(mp, mq));
+			Mono nm = MonoMul(mp, mq);
+			if (!PolyIsZero(&(nm.p))) {
+				InsertNthMono(r3.monos, counter, nm);
+				counter++;
+			}
 		}
 	}
 	/* w mnożeniu nie zachowane były zasady tworzenia poprawnych wielomianów */
@@ -599,7 +604,7 @@ bool PolyIsEq(const Poly *p, const Poly *q) {
 	return true;
 }
 
-/** Podnosi l. całk. do potęgi (zapobiega overflow) 
+/** Podnosi l. całk. do potęgi (zapobiega overflow)
  * @param[in] x : baza
  * @param[in] e : wykładnik
  * @return @f$x^e @f$
@@ -622,15 +627,15 @@ poly_coeff_t Pow(poly_coeff_t x, poly_exp_t e) {
  * @return @f$x^e @f$
  */
  Poly PolyPow(const Poly *p, poly_exp_t e) {
- 	Poly r = PolyFromCoeff(1);
- 	Poly q = PolyClone(p);
- 	Poly nr;
- 	Poly nq;
- 	while (e) {
- 		if (e & 1) {
- 			nr = PolyMul(&r, &q);
- 			PolyDestroy(&r);
- 			r = nr;
+	Poly r = PolyFromCoeff(1);
+	Poly q = PolyClone(p);
+	Poly nr;
+	Poly nq;
+	while (e) {
+		if (e & 1) {
+			nr = PolyMul(&r, &q);
+			PolyDestroy(&r);
+			r = nr;
 		}
 		e >>= 1;
 		nq = PolyMul(&q, &q);
@@ -685,7 +690,7 @@ Poly PolyAt(const Poly *p, poly_coeff_t x) {
  * @param[in] count : długość tablicy x
  * @param[in] x : tablica wielomianów
  * @return wielomian
- */ 
+ */
 Poly MonoCompose(const Mono *m, unsigned count, const Poly x[]) {
 	Poly p = PolyPow(x, m->exp);
 	Poly q;
@@ -698,6 +703,27 @@ Poly MonoCompose(const Mono *m, unsigned count, const Poly x[]) {
 	PolyDestroy(&p);
 	PolyDestroy(&q);
 	return r;
+}
+
+/**
+ * Robi głębokie przeszukiwanie w dół, sprawdzając czy przypadkiem
+ * nie jest tak ze wszstkie wspolczynniki w jednomianie sie zerują
+ * @param[in] m : jednomian
+ * @return m to zero
+ */
+bool MonoIsZero(const Mono *m) {
+	if (PolyIsZero(&(m->p))) {
+		return true;
+	}
+	if (m->p.scalar != 0) {
+		return false;
+	}
+	for (unsigned i = 0; i < m->p.monos_count; i++) {
+		if (!MonoIsZero(&m->p.monos[i])) {
+			return false;
+		}
+	}
+	return true;
 }
 
 /**
@@ -722,5 +748,19 @@ Poly PolyCompose(const Poly *p, unsigned count, const Poly x[]) {
 		PolyDestroy(&r);
 		r = nr;
 	}
+
+	/* usuwanie zerowych jednomianów, które niewiadomo dlaczego pojawiają się */
+
+	Mono m;
+	unsigned counter = 0;
+	for (unsigned i = 0; i < r.monos_count; i++) {
+		m = r.monos[i];
+		if (!MonoIsZero(&m)) {
+			r.monos[counter] = r.monos[i];
+			counter++;
+		}
+	}
+	r.monos_count = counter;
+
 	return r;
 }
