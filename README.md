@@ -1,1 +1,1 @@
-RozwiÄ…zanie zadania na Indywidualny Projekt Programistyczny (program do obsÅ‚ugi balansowanych drzew)
+Rozwi±zanie zadania na Indywidualny Projekt Programistyczny (kalkulator do wielomianów rzadkich wielu zmiennych)
